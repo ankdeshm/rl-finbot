@@ -419,6 +419,10 @@ def node_plan(state: AgentState) -> AgentState:
                 source = "llm" if r.native_tool_call else "llm_text"
         except Exception as exc:  # noqa: BLE001
             errors.append(f"planner LLM error: {type(exc).__name__}: {str(exc)[:300]}")
+    if calls and mg.get("followup") and mg.get("tool") and calls[0]["name"] != mg["tool"] \
+            and suggested.get("name") == mg["tool"]:
+        # "now for Canada": the same analysis as the previous turn on a new scope, so keep its tool
+        calls, source = [suggested], source + "+router_followup"
     if not calls:
         calls = [suggested]
     timings = dict(state.get("timings", {}))

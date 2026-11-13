@@ -25,6 +25,7 @@ from app.semantic.registry import registry
 from app.viz import format as F
 
 CUR = F.CUR
+CMP_RX = re.compile(r"\b(vs\.?|versus|against|compared?|relative to)\b", re.I)
 
 
 # ------------------------------------------------------------------------------------------
@@ -664,7 +665,7 @@ def make_bullets(out: "ToolOutput") -> list[str]:
                            key=lambda c: -abs(rows[c][f"Var vs {lab}"]))[:3]
         else:
             codes = ["6", "7", "11"]
-        focus = out.meta.get("focus")
+        focus = out.meta.get("focus") or "13"          # no metric named: MAOP is the headline line
         fname = meta[focus][0] if focus in meta else out.meta.get("focus_name")
         codes = [c for c in codes if c != focus]      # the line / account the question asked about comes first
         names = ([fname + ":"] if fname else []) + [meta[c][0] + ":" for c in codes if c in meta]
@@ -672,12 +673,13 @@ def make_bullets(out: "ToolOutput") -> list[str]:
         margin = [strip(f) for f in facts if f.startswith("MAOP margin")]
         return (picked + margin)[:5 if fname else 4]
     if kind == "drivers":
+        head = [strip(facts[0])] if facts else []      # the total and its change come first
         b = items_of("By sub-group: ", 3) + items_of("Account drivers (largest first): ", 3)
         org = next((f for f in facts if f.startswith("By ") and "largest change first" in f), None)
         if org and len(b) < 5:
             lvl = org.split(" (", 1)[0][3:]
             b += [f"{lvl.capitalize()} with the largest change: " + strip(org.split(": ", 1)[1].split("; ")[0])]
-        return b[:5]
+        return (head + b)[:6]
     if kind == "ranking":
         return [re.sub(r"^(\d+)\. ", r"Rank \1: ", strip(x)) for x in (facts[1].split("; ") if len(facts) > 1 else [])][:3]
     if kind == "trend":
@@ -718,6 +720,10 @@ def tool_get_pnl(args: GetPnlArgs, ctx: ToolContext) -> ToolOutput:
     versions = norm_versions(args.versions) or ["Actual", "PY", "Budget"]
     if versions == ["Actual"] and not (ctx.resolution and (ctx.resolution.versions or ctx.resolution.comparisons)):
         versions = ["Actual", "PY", "Budget"]      # finance users expect PY and Budget unless they ask otherwise
+    months = period.months()
+    if "Actual" not in versions and months and max(months) <= ti.last_closed_month(ctx.as_of) \
+            and CMP_RX.search(ctx.question or ""):
+        versions.insert(0, "Actual")               # "how are we doing vs budget": Actual is the main version
     if versions[0] == "PY":
         versions.insert(0, "Actual")
     m = registry().get_metric(ctx.resolution.metric) if ctx.resolution and ctx.resolution.metric else None

@@ -96,3 +96,34 @@ def test_pnl_states_the_account_asked_about():
     assert name and "estructuring" in name
     assert out.facts[1].startswith(f"{name}: Actual USD") and out.bullets[0].startswith(f"{name}: Actual USD")
     assert not any(f.startswith("MAOP vs") for f in out.facts)     # MAOP drivers do not explain one account
+
+
+def test_vs_budget_question_keeps_actual_as_main_version():
+    # An LLM planner may ask for Budget only; "how is X doing vs budget" still needs Actual first.
+    out = _pnl_call("How is Colombia doing vs budget?", {"org": "Colombia", "versions": ["Budget"]})
+    assert out.meta["series"] == ["Actual", "Budget"]
+    out = _pnl_call("What is the budget for Colombia for 2025?", {"org": "Colombia", "period": "FY 2025",
+                                                                   "versions": ["Budget"]})
+    assert out.meta["series"] == ["Budget"]
+
+
+def test_headline_figure_is_the_first_bullet():
+    out = _pnl_call("How is the whole group doing this year vs budget?", {"org": "RL Group"})
+    assert out.bullets[0].startswith("MAOP: Actual USD")
+    from app.agent.tools import ToolContext, run_tool
+    q = "Why is Chile Metals & Minerals subcontracting above budget?"
+    drv = run_tool("variance_drivers", {"metric": "subcontracting", "org": "Chile Metals & Minerals",
+                                        "comparison": "Budget"}, ToolContext(user_id="group_cfo", as_of=AS_OF, question=q))
+    assert drv.ok and drv.bullets[0].startswith(drv.meta["name"]) and "Actual USD" in drv.bullets[0]
+
+
+def test_followup_keeps_the_previous_tool(monkeypatch):
+    # "now for Canada" after a P&L question: an LLM that switches to the cockpit is overruled.
+    from app.agent import graph, llm
+    _, mem = ask("How is MAOP YTD vs last year and budget for the United States?", "group_cfo", model="rules", as_of=AS_OF)
+    fake = llm.LLMResult(content="", tool_calls=[{"name": "get_kpi_cockpit", "arguments": {"org": "Canada"}}],
+                         native_tool_call=True)
+    monkeypatch.setattr(graph.llm, "chat", lambda *a, **k: fake)
+    ans, _ = ask("now for Canada", "group_cfo", memory=mem, model="ollama/stub", as_of=AS_OF)
+    assert ans.status == "ok" and ans.diagnostics["tool_calls"][0]["name"] == "get_pnl"
+    assert "router_followup" in ans.diagnostics["tool_choice_source"]
