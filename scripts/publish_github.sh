@@ -21,6 +21,9 @@ curl -sS -X POST "https://api.github.com/user/repos" \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print('Repo API status:', d.get('html_url') or d.get('message'))"
 
 echo "=== Pushing to https://github.com/${GH_USER}/${REPO}.git ==="
-git -C "${ROOT}" push -u "https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_USER}/${REPO}.git" main \
+git -C "${ROOT}" push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GH_USER}/${REPO}.git" main \
   || { echo "Push failed (if the repo already has commits, review and push manually)."; exit 1; }
+# Record the remote without the token (never write the token into .git/config)
+git -C "${ROOT}" remote get-url origin >/dev/null 2>&1 \
+  || git -C "${ROOT}" remote add origin "https://github.com/${GH_USER}/${REPO}.git"
 echo "Done: https://github.com/${GH_USER}/${REPO}"
