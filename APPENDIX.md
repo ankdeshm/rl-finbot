@@ -70,5 +70,8 @@ The full per-model results are in [eval_report.md](eval_report.md) and `results/
 
 - **Synthetic data.** All companies, figures and stories are invented; see `docs/assumptions.md`.
 - **CPU latency.** Local LLMs ran on a shared CPU node, with no GPU. Interactive production use needs a GPU-backed or managed model endpoint.
-- **Guardrail scope.** The guardrail checks that every number exists in the tool output. It does not check what the number is attached to. Before the fix in section 3, qwen called MAOP "restructuring costs" and the check passed. Directions are protected by the explicit comparison facts and the deterministic bullets, but the LLM narrative can still phrase things loosely or attach a correct number to the wrong label. The table and bullets always come straight from the data.
+- **Guardrail scope.** The guardrail checks that every number exists in the tool output. It does not check what the number is attached to, or causes stated without numbers.
+  - Before the fix in section 3, qwen called MAOP "restructuring costs" and the check passed.
+  - In the final qwen run, the same answer has the right figure (USD 960k) but adds "driven by significant changes in the company's operational structure", which is not in the data.
+  - Directions are protected by the explicit comparison facts and the deterministic bullets. The table and the bullets always come straight from the data; the narrative should be read as a summary of them.
 - **Personas.** Three personas demonstrate row-level security; production would map real entitlements (see `docs/production_migration.md`).

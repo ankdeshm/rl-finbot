@@ -1,0 +1,162 @@
+{
+  "ollama/gpt-oss:20b": {
+    "questions": 71,
+    "status": [
+      1.0,
+      71,
+      71
+    ],
+    "tool": [
+      1.0,
+      67,
+      67
+    ],
+    "llm_tool": [
+      1.0,
+      67,
+      67
+    ],
+    "data": [
+      1.0,
+      67,
+      67
+    ],
+    "text": [
+      1.0,
+      67,
+      67
+    ],
+    "rls": [
+      1.0,
+      5,
+      5
+    ],
+    "guard_first": 0.9552238805970149,
+    "guard_retry": 0.04477611940298507,
+    "guard_redacted": 0.0,
+    "guard_template": 0.0,
+    "p50": 14.47,
+    "p95": 27.64,
+    "crashes": 0
+  },
+  "ollama/llama3.1:8b": {
+    "questions": 71,
+    "status": [
+      1.0,
+      71,
+      71
+    ],
+    "tool": [
+      0.9850746268656716,
+      66,
+      67
+    ],
+    "llm_tool": [
+      0.9701492537313433,
+      65,
+      67
+    ],
+    "data": [
+      1.0,
+      67,
+      67
+    ],
+    "text": [
+      1.0,
+      67,
+      67
+    ],
+    "rls": [
+      1.0,
+      5,
+      5
+    ],
+    "guard_first": 0.7910447761194029,
+    "guard_retry": 0.19402985074626866,
+    "guard_redacted": 0.014925373134328358,
+    "guard_template": 0.0,
+    "p50": 12.14,
+    "p95": 20.53,
+    "crashes": 0
+  },
+  "ollama/qwen2.5-coder:14b": {
+    "questions": 71,
+    "status": [
+      1.0,
+      71,
+      71
+    ],
+    "tool": [
+      1.0,
+      67,
+      67
+    ],
+    "llm_tool": [
+      0.9552238805970149,
+      64,
+      67
+    ],
+    "data": [
+      1.0,
+      67,
+      67
+    ],
+    "text": [
+      1.0,
+      67,
+      67
+    ],
+    "rls": [
+      1.0,
+      5,
+      5
+    ],
+    "guard_first": 0.7910447761194029,
+    "guard_retry": 0.11940298507462686,
+    "guard_redacted": 0.029850746268656716,
+    "guard_template": 0.05970149253731343,
+    "p50": 24.07,
+    "p95": 36.97,
+    "crashes": 0
+  },
+  "rules": {
+    "questions": 71,
+    "status": [
+      1.0,
+      71,
+      71
+    ],
+    "tool": [
+      1.0,
+      67,
+      67
+    ],
+    "llm_tool": [
+      null,
+      0,
+      0
+    ],
+    "data": [
+      1.0,
+      67,
+      67
+    ],
+    "text": [
+      1.0,
+      67,
+      67
+    ],
+    "rls": [
+      1.0,
+      5,
+      5
+    ],
+    "guard_first": null,
+    "guard_retry": null,
+    "guard_redacted": null,
+    "guard_template": null,
+    "p50": 0.12,
+    "p95": 0.37,
+    "crashes": 0
+  }
+}

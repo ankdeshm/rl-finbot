@@ -5,8 +5,7 @@ Inspection** (Americas). Business leaders ask finance questions in plain English
 returns a short insight, a finance-style table, a chart, the filters / version / period used, and
 three follow-up questions. The data is a synthetic AD50 management P&L in SQL Server 2022.
 
-On 71 golden questions with SQL ground truth, the deterministic rules router answers all 71 as
-expected in 0.12 s median. LLM results are in [eval_report.md](eval_report.md).
+On 71 golden questions with SQL ground truth, **gpt-oss:20b on CPU passed every check** (status, tool chosen by the LLM itself, expected numbers, headline number in the answer) at a **14.5 s median**, faster than the default qwen2.5-coder:14b (24.1 s, which needed the router fallback on 3 tool choices). The deterministic rules router also passes every check, in 0.12 s, but writes templated text instead of a narrative.
 
 ![Answer to "How is MAOP YTD vs last year and budget for the United States?"](results/ui_screenshots/rules_mode/01_answer.png)
 
@@ -28,12 +27,14 @@ expected in 0.12 s median. LLM results are in [eval_report.md](eval_report.md).
 Expected values come from raw SQL on the base tables (`tests/eval_dsl.py`), not from the semantic
 layer.
 
-| Model | Status as expected | Expected numbers in tool output | Headline number in answer text | Latency p50 / p95 |
-|---|---:|---:|---:|---:|
-| rules (no LLM) | 71/71 | 67/67 | 67/67 | 0.12 s / 0.37 s |
+| Model (all on CPU) | Status as expected | Tool chosen by the LLM alone | Expected numbers in tool output | Headline number in answer text | Guardrail passed first time | Latency p50 / p95 |
+|---|---:|---:|---:|---:|---:|---:|
+| **gpt-oss:20b** | 71/71 | **67/67** | 67/67 | 67/67 | **96%** | 14.5 s / 27.6 s |
+| llama3.1:8b | 71/71 | 65/67 | 67/67 | 67/67 | 79% | **12.1 s / 20.5 s** |
+| qwen2.5-coder:14b (default) | 71/71 | 64/67 | 67/67 | 67/67 | 79% | 24.1 s / 37.0 s |
+| rules (no LLM, templated text) | 71/71 | n/a | 67/67 | 67/67 | n/a | 0.12 s / 0.37 s |
 
-The golden set was written alongside the rules router, so 71/71 shows what the semantic layer
-covers. It is not a held-out score.
+When the LLM's tool call is unusable, a deterministic router supplies one. With that fallback, the final tool choice was right on 67/67 for every model except llama3.1:8b (66/67). The golden set was written alongside the router, and the LLM-side fixes were found on these same questions, so these are not held-out scores. Before those fixes, qwen2.5-coder:14b stated the headline number in 65/67 answers (see [APPENDIX.md](APPENDIX.md)).
 
 **Data pipeline.**
 
