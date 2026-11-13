@@ -95,3 +95,4 @@ def test_pnl_states_the_account_asked_about():
     name = out.meta["focus_name"]
     assert name and "estructuring" in name
     assert out.facts[1].startswith(f"{name}: Actual USD") and out.bullets[0].startswith(f"{name}: Actual USD")
+    assert not any(f.startswith("MAOP vs") for f in out.facts)     # MAOP drivers do not explain one account

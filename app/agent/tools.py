@@ -376,7 +376,9 @@ def facts_pnl(res: Result, focus: str | None = None, focus_meta: tuple[str, int]
                                        cost=sign < 0, rel=rel * sign if _ok(rel) else None)
         facts.append(s + ".")
     reasons = []
-    for lab in labels[1:]:
+    # An account / sub-group question (restructuring, bonus, 7A): the MAOP explanation is not about it,
+    # and small models then attribute the MAOP drivers to the account.
+    for lab in ([] if focus_meta else labels[1:]):
         if "13" not in df.index or not _ok(df.loc["13"].get(f"Var vs {lab}")):
             continue
         total = df.loc["13"][f"Var vs {lab}"]
