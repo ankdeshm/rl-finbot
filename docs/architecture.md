@@ -10,7 +10,7 @@ flowchart LR
     PL --> A["act<br/>typed tools -> semantic layer<br/>-> SQLAlchemy Core"]
     A --> DB[("SQL Server 2022<br/>row-level security")]
     A --> W["write<br/>LLM narrative from FACTS"]
-    W --> G["guard<br/>numeric check<br/>(1 rewrite, then template)"]
+    W --> G["guard<br/>numeric check<br/>(1 rewrite, then redact or template)"]
     G -->|retry| W
     G --> F
     F --> U
@@ -33,7 +33,8 @@ The flow is a LangGraph state graph (`app/agent/graph.py`) with six nodes.
    - The FACTS spell out comparisons ("USD 3.5M (6.8%) above PY (USD 51.0M), favourable").
 5. **guard.** Every number in the text must exist in the tool output, within display rounding.
    - If a number does not, the writer gets one rewrite.
-   - If the rewrite also fails, a templated answer replaces it.
+   - If the rewrite also fails, the sentences with unsupported numbers are dropped, as long as the first (headline) sentence survives. Otherwise a templated answer replaces the text.
+   - The check covers numbers, not the labels attached to them; the table and the key-figure bullets always come straight from the data.
 6. **finalize.** Builds the validated output contract (`FinalAnswer`):
    - narrative + deterministic key-figure bullets + scope notes
    - finance table spec

@@ -5,7 +5,9 @@
    no table functions, automatic TOP/LIMIT 1000, 15 s timeout, and in DuckDB mode the
    row-level-security filter is injected into every fact view.
 2. Numeric guardrail: every number in the LLM's answer must exist (within display rounding)
-   in the tool outputs; otherwise the answer is regenerated once, then replaced by a template.
+   in the tool outputs; otherwise the answer is regenerated once. If it still fails, the sentences
+   with unsupported numbers are dropped (only while the headline sentence survives), else the
+   templated answer is used (see app/agent/graph.py).
 """
 from __future__ import annotations
 

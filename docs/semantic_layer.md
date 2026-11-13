@@ -66,7 +66,7 @@ Users can also compose ratios on the fly. "A as % of B", "A / B", "A per FTE" an
 
 ## Guarantees checked by tests
 
-The checks below are in `tests/test_semantic.py`, `tests/test_guardrails.py`, `tests/test_agent_rules.py` and `tests/test_ui.py`:
+The checks below are in `tests/test_semantic.py`, `tests/test_guardrails.py`, `tests/test_agent_rules.py`, `tests/test_charts.py` and `tests/test_ui.py`:
 
 - Subtotals equal raw-SQL leaf sums for several orgs, versions and periods.
 - Sign conventions, favourability rules and P&L variances as profit impact.
@@ -74,6 +74,8 @@ The checks below are in `tests/test_semantic.py`, `tests/test_guardrails.py`, `t
 - Org, metric and ratio resolution, including typos and the PY / Paraguay conflict.
 - Row-level security, both in the semantic layer and natively in SQL Server.
 - The SQL guard: DML / DDL / EXEC / non-whitelisted tables are rejected, and the row limit is enforced.
-- The numeric guardrail.
+- The numeric guardrail, including the redaction rule (the headline sentence must survive).
+- P&L answers state the line, sub-group or account the question asks about first, and keep PY / Budget unless the user asks for Actual only.
 - The output contract.
+- Bridge charts zoom their value axis when the steps are small next to the totals.
 - The UI renders text, table, chart and follow-ups.
