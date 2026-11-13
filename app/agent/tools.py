@@ -352,11 +352,13 @@ PNL_FACT_LINES = ("13", "6", "3", "11", "7", "8", "9", "12", "18", "21", "1", "2
 MAOP_BRIDGE = ("6", "7", "8", "9", "10", "12")          # MAOP = 6 + 7 + 8 + 9 + 10 + 12
 
 
-def facts_pnl(res: Result, focus: str | None = None) -> list[str]:
+def facts_pnl(res: Result, focus: str | None = None, focus_meta: tuple[str, int] | None = None) -> list[str]:
     df = res.df.set_index("_code")
     labels = res.meta["series"]
     p = labels[0]
     meta = _line_meta()
+    if focus and focus_meta and focus not in meta:      # an account or sub-group the question asks about
+        meta = {**meta, focus: focus_meta}
     facts = [f"Scope {res.filters['org']}, {res.filters['period']}, main version {p}, amounts in {CUR}."]
     order = list(PNL_FACT_LINES)
     if focus and focus in df.index:
@@ -661,12 +663,12 @@ def make_bullets(out: "ToolOutput") -> list[str]:
         else:
             codes = ["6", "7", "11"]
         focus = out.meta.get("focus")
-        if focus in meta:                           # the line the question asked about comes first
-            codes = [focus] + [c for c in codes if c != focus]
-        names = [meta[c][0] + ":" for c in codes if c in meta]
+        fname = meta[focus][0] if focus in meta else out.meta.get("focus_name")
+        codes = [c for c in codes if c != focus]      # the line / account the question asked about comes first
+        names = ([fname + ":"] if fname else []) + [meta[c][0] + ":" for c in codes if c in meta]
         picked = [strip(f) for n in names for f in facts if f.startswith(n)]
         margin = [strip(f) for f in facts if f.startswith("MAOP margin")]
-        return (picked + margin)[:5 if focus in meta else 4]
+        return (picked + margin)[:5 if fname else 4]
     if kind == "drivers":
         b = items_of("By sub-group: ", 3) + items_of("Account drivers (largest first): ", 3)
         org = next((f for f in facts if f.startswith("By ") and "largest change first" in f), None)
@@ -716,14 +718,18 @@ def tool_get_pnl(args: GetPnlArgs, ctx: ToolContext) -> ToolOutput:
         versions = ["Actual", "PY", "Budget"]      # finance users expect PY and Budget unless they ask otherwise
     if versions[0] == "PY":
         versions.insert(0, "Actual")
-    res = ctx.sl.pnl(filt, period, versions, max(1, min(3, args.account_depth)))
-    out = _output("get_pnl", res, notes)
-    focus = None
     m = registry().get_metric(ctx.resolution.metric) if ctx.resolution and ctx.resolution.metric else None
+    focus, focus_meta, depth = None, None, max(1, min(3, args.account_depth))
     if m is not None and m.kind == "line":
         focus = str(m.line)
-    out.facts = facts_pnl(res, focus)
+    elif m is not None and m.kind in ("group", "leaf") and m.code:
+        focus, focus_meta = m.code, (m.name, m.natural_sign)
+        depth = max(depth, 2 if m.kind == "group" else 3)    # the account asked about must be in the table
+    res = ctx.sl.pnl(filt, period, versions, depth)
+    out = _output("get_pnl", res, notes)
+    out.facts = facts_pnl(res, focus, focus_meta)
     out.meta["focus"] = focus
+    out.meta["focus_name"] = focus_meta[0] if focus_meta else None
     return out
 
 

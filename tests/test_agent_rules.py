@@ -86,3 +86,12 @@ def test_llm_actual_only_call_keeps_comparisons_unless_asked():
     assert out.meta["series"] == ["Actual", "PY", "Budget"]
     out = _pnl_call("What is the actual net income of Mexico this year?", {"org": "Mexico", "versions": ["Actual"]})
     assert out.meta["series"] == ["Actual"]
+
+
+def test_pnl_states_the_account_asked_about():
+    # A single account (restructuring) asked via get_pnl at line depth: the account must still be stated first.
+    q = "What restructuring costs did Brazil Environmental Lab Testing book this year?"
+    out = _pnl_call(q, {"org": "Brazil Environmental Lab Testing", "account_depth": 1})
+    name = out.meta["focus_name"]
+    assert name and "estructuring" in name
+    assert out.facts[1].startswith(f"{name}: Actual USD") and out.bullets[0].startswith(f"{name}: Actual USD")

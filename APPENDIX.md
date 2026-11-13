@@ -51,6 +51,7 @@ in [README.md](README.md); raw outputs are in [`results/`](results/).
 | qwen's answer to "What is the net income of Mexico this year?" never stated net income | The P&L key-figure bullets always used the same lines (production, personnel, gross profit), and the guardrail had dropped the narrative sentence that held the figure | The line the question asks about is always the first bullet |
 | The same answer said "lower net income" with nothing to compare against | The LLM planner asked `get_pnl` for Actual only, and the tool followed it | Unless the user names versions or comparisons, `get_pnl` always adds PY and Budget, as the rules router does |
 | Some redacted answers opened with "This improvement is driven by …" | The guardrail had dropped the first sentence (the headline), so the rest pointed back to a sentence that was gone and could keep unsupported causes | If the headline sentence has to be dropped, the templated answer is used instead |
+| qwen called MAOP (USD 919k) "restructuring costs" for Brazil Environmental Lab Testing; the real figure was USD 960k | The LLM picked `get_pnl`. The restructuring account was in the table but not in the facts, so the model reused a nearby number, and the guardrail passed it because USD 919k exists in the output | When the question names an account or sub-group, `get_pnl` includes it (deeper account level if needed) and states it as the first fact and bullet |
 
 ## 4. Evaluation details
 
@@ -65,5 +66,5 @@ The full per-model results are in [eval_report.md](eval_report.md) and `results/
 
 - **Synthetic data.** All companies, figures and stories are invented; see `docs/assumptions.md`.
 - **CPU latency.** Local LLMs ran on a shared CPU node, with no GPU. Interactive production use needs a GPU-backed or managed model endpoint.
-- **Guardrail scope.** The guardrail checks numbers, not wording. Directions are protected by the explicit comparison facts and the deterministic bullets, but the LLM narrative can still phrase things loosely.
+- **Guardrail scope.** The guardrail checks that every number exists in the tool output. It does not check what the number is attached to. Before the fix in section 3, qwen called MAOP "restructuring costs" and the check passed. Directions are protected by the explicit comparison facts and the deterministic bullets, but the LLM narrative can still phrase things loosely or attach a correct number to the wrong label. The table and bullets always come straight from the data.
 - **Personas.** Three personas demonstrate row-level security; production would map real entitlements (see `docs/production_migration.md`).
