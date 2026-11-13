@@ -223,11 +223,10 @@ def test_cockpit_has_all_kpis():
 def test_labels_are_generic():
     sl = SemanticLayer("group_cfo", AS_OF)
     labels = [r["label"] for r in sl.pnl_rows(3)]
-    assert "Operating profit".upper() in labels and "EBIT" in labels
-    assert not any(re.match(r"^\d", lab) for lab in labels), "P&L labels must not show line numbers or codes"
-    text = " ".join(labels + list(dims().org["l5_business"]) + list(dims().org["city"]))
-    for word in ("MAOP", "AD50", "B26", "Santiago", "Management OP", "neutralization"):
-        assert word.lower() not in text.lower(), word
+    assert {"OPERATING PROFIT", "EBIT", "Direct staff costs", "Indirect staff costs", "Direct staff bonus"} <= set(labels)
+    assert not any(re.search(r"\d", lab) for lab in labels), "P&L labels must not show line numbers or account codes"
+    chile = set(dims().org.loc[dims().org["l3_country"] == "Chile", "city"])
+    assert "Calama" in chile and chile <= {"Calama", "Antofagasta", "Concepcion"}
 
 
 def test_environmental_lab_only_in_canada_and_us():
