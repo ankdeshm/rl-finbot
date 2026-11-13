@@ -23,7 +23,7 @@ The flow is a LangGraph state graph (`app/agent/graph.py`) with six nodes.
    - Follow-ups ("now for Canada", "same vs FC2", "why is the first one so low?") are merged with the previous turn's memory.
    - The access check (`app/semantic/access.py`) refuses, narrows or allows the request before any data is read.
    - Ambiguous names (a city with several businesses) trigger a clarification.
-2. **plan.** The LLM chooses one of eight typed tools through native or text tool calling (LiteLLM).
+2. **plan.** The LLM chooses one of nine typed tools through native or text tool calling (LiteLLM).
    - If the model returns no usable call, a deterministic router supplies one.
    - Every answer records whether the LLM or the router made the choice.
 3. **act.** Tools validate their arguments (Pydantic) and call the semantic layer.
@@ -48,20 +48,21 @@ The flow is a LangGraph state graph (`app/agent/graph.py`) with six nodes.
 
 | Tool | Answers | Chart |
 |---|---|---|
-| `get_pnl` | AD50 P&L for an org and period vs PY / Budget / forecasts | MAOP bridge (waterfall) |
+| `get_pnl` | general-ledger P&L for an org and period vs PY / Budget / forecasts | operating profit bridge (waterfall) |
 | `get_trend` | monthly series of a metric or ratio (Actual, PY, Budget, R12M) | line |
 | `get_ratio` | one ratio / KPI vs comparisons | bar |
 | `variance_drivers` | account and org drill-down of a variance (pp bridge for margins) | waterfall or stacked bar |
 | `rank_entities` | top / bottom BUs, businesses, sectors, countries, regions | horizontal bar |
 | `compare_versions` | Actual vs Budget vs FC1/FC2/FC3 (full-year view for forecasts) | grouped bar |
 | `get_kpi_cockpit` | operational profitability cockpit, MTD and YTD vs LY and Budget | combo (bars + lines) |
+| `get_workforce` | headcount, FTE, hires, leavers, attrition, utilization and overtime from the employee records, by role, grade, staff type, month or org level, vs PY | horizontal bar, line, or hires vs leavers bars |
 | `run_readonly_sql` | fallback: one SELECT on whitelisted views (sqlglot guard, row limit, timeout) | bar |
 
 ## Semantic layer
 
 `app/semantic/` has five parts:
 
-- **Registry.** Built from `metrics.yaml` (AD50 lines, groups 7A/7B, computed amounts, statistics, 21 ratios, cockpit KPIs, driver tree) plus the chart of accounts.
+- **Registry.** Built from `metrics.yaml` (P&L lines, direct / indirect staff cost groups, computed amounts, statistics, 21 ratios, cockpit KPIs, driver tree) plus the chart of accounts.
 - **Query builder.** `query_builder.py` aggregates leaf accounts with SQLAlchemy Core and pivots them into a "wide" frame where every line, subtotal, group and statistic is a column. The same code runs on SQL Server and DuckDB.
 - **Time intelligence.** `time_intel.py` covers YTD, QTD, MTD, R12M, FY, quarters and ranges, the close calendar and the last closed month, PY as shifted Actual, forecast availability by as-of date, like-for-like truncation, and favourability.
 - **Access.** `access.py` holds persona scopes and narrowing messages, which mirror the SQL Server security policy.

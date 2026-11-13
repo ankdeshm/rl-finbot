@@ -105,12 +105,12 @@ class ResolveEntitiesArgs(BaseModel):
 
 
 class GetPnlArgs(BaseModel):
-    org: str = Field("", description="Org in plain words: 'United States', 'Brazil Environmental Lab Testing', 'US & Canada', 'BPU', 'US-EPV-DEN-01'. Empty = user's default scope")
+    org: str = Field("", description="Org in plain words: 'United States', 'Canada Environmental Lab Testing', 'US & Canada', 'BPU', 'US-EPV-DEN-01'. Empty = user's default scope")
     period: str = Field("", description="'YTD', 'Q3 2025', 'March 2025', 'FY 2025', 'last month', 'R12M'. Empty = YTD of last closed month")
     period_type: str = Field("", description="Optional: MONTH, QTD, YTD, R12M, FY, QUARTER")
     versions: list[str] = Field(default_factory=lambda: ["Actual", "PY", "Budget"],
                                 description="First = main version, rest = comparisons. Allowed: Actual, PY, Budget, FC1, FC2, FC3, LatestFC")
-    account_depth: int = Field(1, description="1 = P&L lines, 2 = adds 7A/7B, 3 = all accounts")
+    account_depth: int = Field(1, description="1 = P&L lines, 2 = adds direct / indirect staff costs, 3 = all accounts")
 
     @field_validator("versions", mode="before")
     @classmethod
@@ -123,7 +123,7 @@ class GetPnlArgs(BaseModel):
         return _as_int(v, 1)
 
 class GetTrendArgs(BaseModel):
-    metric_or_ratio: str = Field(description="Metric or ratio: 'maop', 'production', 'personnel cost', 'wip', 'personnel_to_revenue', 'maop margin'")
+    metric_or_ratio: str = Field(description="Metric or ratio: 'operating profit', 'production', 'personnel cost', 'wip', 'personnel_to_revenue', 'operating margin'")
     org: str = Field("", description="Org in plain words (see get_pnl)")
     start: str = Field("", description="First month, e.g. '2023-01' or 'Jan 2025'. Empty = 24 months back")
     end: str = Field("", description="Last month, e.g. '2026-10'. Empty = last closed month")
@@ -147,7 +147,7 @@ class GetRatioArgs(BaseModel):
         return ",".join(_as_list(v)) if not isinstance(v, str) else v
 
 class VarianceDriversArgs(BaseModel):
-    metric: str = Field(description="Metric or ratio to explain: 'maop', 'maop margin', 'personnel_7a', 'production', 'subcontracting'")
+    metric: str = Field(description="Metric or ratio to explain: 'operating profit', 'operating margin', 'personnel_7a' (direct staff costs), 'production', 'subcontracting'")
     org: str = Field("", description="Org in plain words")
     period: str = Field("", description="Period words (see get_pnl)")
     comparison: str = Field("PY", description="One of PY, Budget, FC1, FC2, FC3, LatestFC")
@@ -164,7 +164,7 @@ class VarianceDriversArgs(BaseModel):
         return _as_int(v, 1)
 
 class RankEntitiesArgs(BaseModel):
-    metric_or_ratio: str = Field(description="Metric or ratio to rank by, e.g. 'maop margin', 'subcontracting'")
+    metric_or_ratio: str = Field(description="Metric or ratio to rank by, e.g. 'operating margin', 'subcontracting'")
     org_level: str = Field("l6_bu", description="l2_region, l3_country, l4_product_line, l5_business or l6_bu")
     parent_filter: str = Field("", description="Org to rank within, e.g. 'US & Canada' or 'Mexico'. Empty = user's default scope")
     period: str = Field("", description="Period words (see get_pnl)")
@@ -197,8 +197,24 @@ class GetKpiCockpitArgs(BaseModel):
     month: str = Field("", description="Month for MTD, e.g. 'March 2026' or '2026-03'. Empty = last closed month")
 
 
+class GetWorkforceArgs(BaseModel):
+    org: str = Field("", description="Org in plain words (see get_pnl)")
+    period: str = Field("", description="Period words (see get_pnl). Employee records cover closed months only")
+    group_by: str = Field("", description="role, grade, staff_type (direct / indirect), month, or an org level "
+                                          "(region, country, product line, business, BU). Empty = from the question")
+    metric: str = Field("", description="Main figure: headcount, fte, hires, leavers, attrition, voluntary_attrition, "
+                                        "utilization, overtime. Empty = from the question")
+    top_n: int = Field(0, description="For org levels: number of entities to list, 0 = all")
+
+    @field_validator("top_n", mode="before")
+    @classmethod
+    def coerce_top_n(cls, v):
+        return _as_int(v, 0)
+
+
 class RunReadonlySqlArgs(BaseModel):
-    sql: str = Field(description="ONE read-only SELECT over the views v_pnl, v_pnl_leaf, v_stats, v_org, v_account, v_period, v_version")
+    sql: str = Field(description="ONE read-only SELECT over the views v_pnl, v_pnl_leaf, v_stats, v_org, v_account, v_period, "
+                                 "v_version, v_employee, v_employee_month")
 
 
 LEVEL_WORDS = {
@@ -350,7 +366,7 @@ def _line_meta() -> dict[str, tuple[str, int]]:
 # Facts (deterministic, pre-formatted) per result kind
 # ------------------------------------------------------------------------------------------
 PNL_FACT_LINES = ("13", "6", "3", "11", "7", "8", "9", "12", "18", "21", "1", "2")
-MAOP_BRIDGE = ("6", "7", "8", "9", "10", "12")          # MAOP = 6 + 7 + 8 + 9 + 10 + 12
+OP_BRIDGE = ("6", "7", "8", "9", "10", "12")            # operating profit (line 13) = 6 + 7 + 8 + 9 + 10 + 12
 
 
 def facts_pnl(res: Result, focus: str | None = None, focus_meta: tuple[str, int] | None = None) -> list[str]:
@@ -377,14 +393,14 @@ def facts_pnl(res: Result, focus: str | None = None, focus_meta: tuple[str, int]
                                        cost=sign < 0, rel=rel * sign if _ok(rel) else None)
         facts.append(s + ".")
     reasons = []
-    # An account / sub-group question (restructuring, bonus, 7A): the MAOP explanation is not about it,
-    # and small models then attribute the MAOP drivers to the account.
+    # An account / sub-group question (restructuring, bonus, direct staff costs): the operating-profit
+    # explanation is not about it, and small models then attribute its drivers to the account.
     for lab in ([] if focus_meta else labels[1:]):
         if "13" not in df.index or not _ok(df.loc["13"].get(f"Var vs {lab}")):
             continue
         total = df.loc["13"][f"Var vs {lab}"]
         up = total >= 0
-        items = [(code, df.loc[code][f"Var vs {lab}"]) for code in MAOP_BRIDGE
+        items = [(code, df.loc[code][f"Var vs {lab}"]) for code in OP_BRIDGE
                  if code in df.index and _ok(df.loc[code].get(f"Var vs {lab}")) and abs(df.loc[code][f"Var vs {lab}"]) >= 500]
 
         def word(code, v):
@@ -392,7 +408,7 @@ def facts_pnl(res: Result, focus: str | None = None, focus_meta: tuple[str, int]
             return f"{meta[code][0]} ({F.eur(abs(v))} {'higher' if higher else 'lower'}, {_fav_word(v > 0)})"
         drivers = sorted([i for i in items if (i[1] > 0) == up], key=lambda x: -abs(x[1]))[:2]
         offsets = sorted([i for i in items if (i[1] > 0) != up], key=lambda x: -abs(x[1]))[:2]
-        s = (f"MAOP vs {lab}: {'increase' if up else 'decrease'} of {F.eur(abs(total))}"
+        s = (f"{meta['13'][0]} vs {lab}: {'increase' if up else 'decrease'} of {F.eur(abs(total))}"
              + (" driven by " + " and ".join(word(c, v) for c, v in drivers) if drivers else "")
              + (", partly offset by " + " and ".join(word(c, v) for c, v in offsets) if offsets else "") + ".")
         reasons.append(s)
@@ -553,7 +569,7 @@ def facts_drivers(res: Result) -> list[str]:
             else:
                 parts.append(f"{r[lvl]} {_val(r[cur], vfmt)} vs {_val(r[cmp_], vfmt)} "
                              f"(change {F.value(r['Impact'], 'eur' if vfmt == 'rate' else fmt, signed=True)}, {_fav_word(r['_fav'])})")
-        facts.append(f"By {lvl.lower()} (largest change first): " + "; ".join(parts))
+        facts.append(f"By {lvl if lvl.isupper() else lvl.lower()} (largest change first): " + "; ".join(parts))
     return facts
 
 
@@ -562,8 +578,8 @@ def facts_ranking(res: Result) -> list[str]:
     fmt, lvl, cur = m["fmt"], m["level_label"], m["current"]
     vfmt = "rate" if (fmt == "eur" and m.get("kind") == "ratio") else fmt
     order = "lowest first" if m["ascending"] else "highest first"
-    facts = [f"Ranking of {lvl}s by {m['name']} within {res.filters['org']}, {res.filters['period']} ({order}); "
-             f"{m['entities_total']} {lvl}s in scope, showing {len(df)}."]
+    facts = [f"Ranking of {F.plural(lvl)} by {m['name']} within {res.filters['org']}, {res.filters['period']} ({order}); "
+             f"{m['entities_total']} {F.plural(lvl)} in scope, showing {len(df)}."]
     parts = []
     for _, r in df.iterrows():
         s = f"{int(r['Rank'])}. {r[lvl]} {_val(r[cur], vfmt)}"
@@ -577,7 +593,7 @@ def facts_ranking(res: Result) -> list[str]:
     facts.append("; ".join(parts))
     if fmt == "eur" and m.get("kind") != "ratio" and len(df):
         tot = float(df[cur].sum())
-        s = f"Total of the listed {lvl}s: {F.eur(tot)}"
+        s = f"Total of the listed {F.plural(lvl)}: {F.eur(tot)}"
         if "PY" in df.columns and df["PY"].notna().all():
             py = float(df["PY"].sum())
             s += "; " + cmp_phrase(tot - py, py, "PY", "eur", ti.is_favorable(tot - py, m.get("favorable", "up")),
@@ -643,6 +659,93 @@ def facts_cockpit(res: Result) -> list[str]:
     return facts
 
 
+WF_PY_COL = {"headcount": "Headcount PY", "fte": "_fte_py", "hires": "_hires_py", "leavers": "_leavers_py",
+             "restructuring_leavers": "_restructuring_py", "attrition": "Attrition PY",
+             "voluntary_attrition": "_voluntary_attrition_py", "utilization": "Utilization PY", "overtime": "_overtime_py"}
+WF_SHORT = {"headcount": "average headcount", "fte": "average FTE", "hires": "hires", "leavers": "leavers",
+            "restructuring_leavers": "restructuring leavers", "attrition": "attrition (annualised)",
+            "voluntary_attrition": "voluntary attrition (annualised)", "utilization": "utilization",
+            "overtime": "overtime ratio"}
+
+
+def _wf_value(v, fmt: str) -> str:
+    if fmt == "pct":
+        return F.pct(v)
+    if fmt == "count":
+        return F.num(v)
+    return F.value(v, "num")
+
+
+def facts_workforce(res: Result) -> list[str]:
+    from app.semantic.query_builder import WF_METRICS
+
+    m, recs = res.meta, _records(res.df)
+    cols, label, focus, has_py = m["cols"], m["group_label"], m["focus"], m["has_py"]
+    tot = next((r for r in recs if r.get("_kind") == "subtotal"), recs[0] if recs else {})
+    facts = [f"Scope {res.filters['org']}, {res.filters['period']}: workforce from fictional employee records (Actual)"
+             + (", compared with the same months of the prior year (PY)." if has_py else ".")]
+    items: dict[str, str] = {}
+    for key in ("headcount", "fte", "attrition", "voluntary_attrition", "utilization", "overtime"):
+        col, name, fmt, fav_dir = cols[key], WF_METRICS[key][1], WF_METRICS[key][2], WF_METRICS[key][3]
+        cur, py = tot.get(col), tot.get(WF_PY_COL[key])
+        if not _ok(cur):
+            continue
+        s = f"{name}: {_wf_value(cur, fmt)}"
+        if has_py and _ok(py):
+            if fmt == "pct":
+                s += "; " + cmp_phrase(cur - py, py, "PY", "pct", None if fav_dir == "neutral" else ti.is_favorable(cur - py, fav_dir))
+            else:
+                s += "; " + cmp_phrase(cur - py, py, "PY", "num", None, rel=(cur / py - 1) if py else None)
+        items[key] = s
+    lv, rs = tot.get("Leavers"), tot.get("of which restructuring")
+    if _ok(lv):
+        s = f"Leavers: {F.num(lv)} ({F.num(lv - (rs or 0))} voluntary, {F.num(rs or 0)} restructuring)"
+        lpy, rpy = tot.get("_leavers_py"), tot.get("_restructuring_py")
+        if has_py and _ok(lpy):
+            s += f"; PY {F.num(lpy)} ({F.num(lpy - (rpy or 0))} voluntary, {F.num(rpy or 0)} restructuring)"
+        items["leavers"] = items["restructuring_leavers"] = s
+    if _ok(tot.get("Hires")):
+        items["hires"] = f"Hires: {F.num(tot['Hires'])}" + (f"; PY {F.num(tot['_hires_py'])}"
+                                                            if has_py and _ok(tot.get("_hires_py")) else "")
+    order = [focus] + ["headcount", "attrition", "leavers", "hires", "utilization", "overtime", "voluntary_attrition", "fte"]
+    seen: list[str] = []
+    for k in order:
+        if k in items and items[k] not in seen:
+            seen.append(items[k])
+    facts += [s + "." for s in seen]
+    body = [r for r in recs if r.get("_kind") != "subtotal"]
+    fcol, fname, ffmt = cols[focus], WF_METRICS[focus][1], WF_METRICS[focus][2]
+    if body and m.get("group") == "month":
+        mname = fname.replace("(annualised)", "(rolling 12 months)")
+        vals = "; ".join(f"{r[label]} {_wf_value(r.get(fcol), ffmt)}" for r in body if _ok(r.get(fcol)))
+        facts.append(f"{mname} by month: {vals}.")
+        if focus not in ("hires", "leavers", "restructuring_leavers"):
+            facts.append("Hires and leavers by month: " + "; ".join(
+                f"{r[label]} {F.num(r.get('Hires') or 0)} hires, {F.num(r.get('Leavers') or 0)} leavers" for r in body) + ".")
+    elif body:
+        pyc = WF_PY_COL.get(focus) if focus in ("headcount", "attrition", "utilization") else None
+        parts = []
+        for r in body[:10]:
+            s = f"{r[label]} {_wf_value(r.get(fcol), ffmt)}" if _ok(r.get(fcol)) else f"{r[label]} n/a"
+            if has_py and pyc and _ok(r.get(pyc)):
+                s += f" (PY {_wf_value(r[pyc], ffmt)})"
+            parts.append(s)
+        short = WF_SHORT.get(focus, focus)
+        lt = label if label.isupper() else label.lower()
+        if m.get("group") in ("grade", "staff_type"):
+            head = f"By {lt}, {short}"
+        else:
+            head = f"By {lt}, {'lowest' if m.get('ascending') else 'highest'} {short} first"
+        n_all = m.get("entities_total", 0)
+        more = f" ({len(body)} of {n_all} {F.plural(lt)} shown)" if n_all > len(body) else ""
+        facts.append(f"{head}{more}: " + "; ".join(parts) + ".")
+    peak = m.get("peak_leavers")
+    if peak and (focus in ("leavers", "restructuring_leavers", "attrition", "voluntary_attrition") or m.get("group") == "month"):
+        rs_txt = f", of which {F.num(peak['restructuring'])} restructuring" if peak["restructuring"] else ""
+        facts.append(f"Month with the most leavers: {peak['month']} ({F.num(peak['leavers'])}{rs_txt}).")
+    return facts
+
+
 def make_bullets(out: "ToolOutput") -> list[str]:
     """Key figures as bullet points, copied from the deterministic facts."""
     facts, kind = out.facts or [], out.kind
@@ -661,16 +764,16 @@ def make_bullets(out: "ToolOutput") -> list[str]:
         meta = _line_meta()
         if len(labels) > 1:
             lab = labels[1]
-            codes = sorted([c for c in MAOP_BRIDGE if c in rows and _ok(rows[c].get(f"Var vs {lab}"))],
+            codes = sorted([c for c in OP_BRIDGE if c in rows and _ok(rows[c].get(f"Var vs {lab}"))],
                            key=lambda c: -abs(rows[c][f"Var vs {lab}"]))[:3]
         else:
             codes = ["6", "7", "11"]
-        focus = out.meta.get("focus") or "13"          # no metric named: MAOP is the headline line
+        focus = out.meta.get("focus") or "13"          # no metric named: operating profit is the headline line
         fname = meta[focus][0] if focus in meta else out.meta.get("focus_name")
         codes = [c for c in codes if c != focus]      # the line / account the question asked about comes first
         names = ([fname + ":"] if fname else []) + [meta[c][0] + ":" for c in codes if c in meta]
         picked = [strip(f) for n in names for f in facts if f.startswith(n)]
-        margin = [strip(f) for f in facts if f.startswith("MAOP margin")]
+        margin = [strip(f) for f in facts if f.startswith("Operating margin")]
         return (picked + margin)[:5 if fname else 4]
     if kind == "drivers":
         head = [strip(facts[0])] if facts else []      # the total and its change come first
@@ -678,7 +781,8 @@ def make_bullets(out: "ToolOutput") -> list[str]:
         org = next((f for f in facts if f.startswith("By ") and "largest change first" in f), None)
         if org and len(b) < 5:
             lvl = org.split(" (", 1)[0][3:]
-            b += [f"{lvl.capitalize()} with the largest change: " + strip(org.split(": ", 1)[1].split("; ")[0])]
+            b += [f"{lvl if lvl.isupper() else lvl.capitalize()} with the largest change: "
+                  + strip(org.split(": ", 1)[1].split("; ")[0])]
         return (head + b)[:6]
     if kind == "ranking":
         return [re.sub(r"^(\d+)\. ", r"Rank \1: ", strip(x)) for x in (facts[1].split("; ") if len(facts) > 1 else [])][:3]
@@ -689,11 +793,22 @@ def make_bullets(out: "ToolOutput") -> list[str]:
     if kind == "ratio":
         return [strip(f) for f in facts[1:4]]
     if kind == "versions":
-        keep = ("Maop:", "MAOP:", "Production:", "MAOP margin")
+        keep = (registry().metrics["maop"].name + ":", "Production:", "Operating margin")
         return [strip(f) for f in facts if f.startswith(keep)][:3]
     if kind == "cockpit":
         keep = ("Direct margin:", "Utilization rate", "Production per FTE", "Overtime ratio")
         return [strip(f) for f in facts if f.startswith(keep)][:4]
+    if kind == "workforce":
+        body = [strip(f) for f in facts if not f.startswith("Scope ")]
+        head, rest = body[:1], body[1:]
+        brk = [f for f in rest if f.startswith("By ")]
+        if brk:                                          # top 3 of the breakdown
+            name, items = brk[0].split(": ", 1)
+            brk = [re.sub(r" \(\d+ of \d+ [^)]* shown\)$", "", name) + ": " + "; ".join(items.split("; ")[:3])]
+        others = [f for f in rest if not f.startswith(("By ", "Month with the most", "Hires and leavers by month"))
+                  and " by month: " not in f]
+        peak = [f for f in rest if f.startswith("Month with the most leavers")]
+        return (head + brk + others[:3] + peak)[:6]
     return []
 
 
@@ -844,6 +959,97 @@ def tool_get_kpi_cockpit(args: GetKpiCockpitArgs, ctx: ToolContext) -> ToolOutpu
     return out
 
 
+# Workforce questions: grouping and main figure from the text (earliest mention wins)
+WF_GROUP_RX = [
+    ("role", re.compile(r"\b(?:by|per|each|across|for each)\s+(?:job\s+)?roles?\b|\broles\b|\bjob (?:titles?|families)\b", re.I)),
+    ("grade", re.compile(r"\b(?:by|per|each|across)\s+grades?\b|\bgrades\b|\bseniority\b", re.I)),
+    ("staff_type", re.compile(r"\bstaff[ _]types?\b|\bdirect\s+(?:vs\.?|versus|and)\s+indirect\b|"
+                              r"\bindirect\s+(?:vs\.?|versus|and)\s+direct\b", re.I)),
+    ("month", re.compile(r"\b(?:by|per|each)\s+month\b|\bmonthly\b|\bmonth[- ]by[- ]month\b|\btrend\b|\bover time\b|"
+                         r"\bsince\b", re.I)),
+]
+WF_METRIC_RX = [
+    ("voluntary_attrition", re.compile(r"\bvoluntary\b|\bresign\w*|\bquit(?:s|ting)?\b", re.I)),
+    ("attrition", re.compile(r"\b(?:attrition|turnover|churn|retention)\b", re.I)),
+    ("restructuring_leavers", re.compile(r"\brestructuring\s+(?:leavers?|exits?)\b|\blayoffs?\b|\blaid off\b|\bredundanc\w*", re.I)),
+    ("leavers", re.compile(r"\b(?:leavers?|left|exits?|departures?|leaving)\b", re.I)),
+    ("hires", re.compile(r"\b(?:hires?|hiring|hired|joiners?|new starters?|recruit\w*|onboard\w*)\b", re.I)),
+    ("utilization", re.compile(r"\butili[sz]ation\b|\bbillab\w*|\bchargeab\w*", re.I)),
+    ("overtime", re.compile(r"\bovertime\b", re.I)),
+    ("fte", re.compile(r"\bftes?\b|\bfull[- ]time equivalents?\b", re.I)),
+]
+WF_HEADCOUNT_RX = re.compile(r"\bhead ?counts?\b", re.I)
+WF_GENERIC_RX = re.compile(r"\bemployees\b|\bworkforce\b|\bpeople\b|\bstaff\b", re.I)
+WF_GROUP_WORDS = {"role": "role", "roles": "role", "job": "role", "job role": "role", "grade": "grade", "grades": "grade",
+                  "seniority": "grade", "staff_type": "staff_type", "staff type": "staff_type", "type": "staff_type",
+                  "direct / indirect": "staff_type", "direct vs indirect": "staff_type", "direct": "staff_type",
+                  "month": "month", "months": "month", "monthly": "month", "trend": "month"}
+
+
+def _wf_pick(text: str, rxs) -> str | None:
+    best = None
+    for key, rx in rxs:
+        mm = rx.search(text or "")
+        if mm and (best is None or mm.start() < best[1]):
+            best = (key, mm.start())
+    return best[0] if best else None
+
+
+def wf_focus_from(text: str) -> str | None:
+    """Main workforce figure a question asks for (earliest mention; None if it names none)."""
+    return _wf_pick(text, WF_METRIC_RX + [("headcount", WF_HEADCOUNT_RX)]) or \
+        ("headcount" if WF_GENERIC_RX.search(text or "") else None)
+
+
+def wf_group_from(text: str) -> str | None:
+    return _wf_pick(text, WF_GROUP_RX)
+
+
+def _wf_norm_group(v: str | None) -> str | None:
+    t = (v or "").strip().lower().replace("-", " ")
+    if not t or t in ("none", "null", "total", "all"):
+        return None
+    if t in ORG_LEVELS:
+        return t
+    return WF_GROUP_WORDS.get(t) or LEVEL_WORDS.get(t) or LEVEL_WORDS.get(t.rstrip("s")) or wf_group_from(t)
+
+
+def _wf_norm_metric(v: str | None) -> str | None:
+    from app.semantic.query_builder import WF_METRICS
+
+    t = (v or "").strip().lower()
+    if not t:
+        return None
+    return t if t in WF_METRICS else wf_focus_from(t)
+
+
+def tool_get_workforce(args: GetWorkforceArgs, ctx: ToolContext) -> ToolOutput:
+    filt, refusal, notes = resolve_org(ctx, args.org, "get_workforce")
+    if refusal:
+        return refusal
+    period = resolve_period(ctx, args.period)
+    q, r = ctx.question or "", ctx.resolution
+    mem = ctx.memory if ctx.memory.get("tool") == "get_workforce" else {}
+    group = _wf_norm_group(args.group_by) or wf_group_from(q) or (r.level_hint if r is not None else None) \
+        or mem.get("wf_group") or "staff_type"
+    focus = _wf_norm_metric(args.metric) or wf_focus_from(q)
+    if not focus and r is not None:
+        rmap = {"utilization_rate": "utilization", "overtime_ratio": "overtime", "fte": "fte", "headcount": "headcount"}
+        focus = rmap.get(r.ratio or "") or rmap.get((r.metrics or [""])[0])
+    focus = focus or mem.get("wf_focus") or "headcount"
+    top_n = args.top_n or (r.top_n if r is not None and r.top_n else 0)
+    if not top_n and group in ORG_LEVELS and r is not None and "rank" in (r.intents or []):
+        top_n = 10
+    asc = bool(r.ascending) if r is not None and r.ascending is not None else False
+    res = ctx.sl.workforce(filt, period, group, focus, top_n or None, asc)
+    out = _output("get_workforce", res, notes)
+    out.facts = facts_workforce(res)
+    mentioned = {k for k, rx in WF_METRIC_RX if rx.search(q)}
+    if group == "month" and mentioned & {"hires", "leavers", "restructuring_leavers"}:
+        out.meta["chart"] = "hires_leavers"            # "headcount, hires and leavers by month": bars per month
+    return out
+
+
 def tool_run_readonly_sql(args: RunReadonlySqlArgs, ctx: ToolContext) -> ToolOutput:
     from app.agent.guardrails import SqlGuardError, execute_readonly, validate_sql
 
@@ -866,18 +1072,22 @@ def tool_run_readonly_sql(args: RunReadonlySqlArgs, ctx: ToolContext) -> ToolOut
 
 TOOL_DESCRIPTIONS = {
     "resolve_entities": "Resolve org units, metrics, periods and versions mentioned in text (fuzzy).",
-    "get_pnl": "AD50 P&L statement (lines 1-21: Billing, WIP, Revenue, Production, costs, Gross profit, MAOP, "
-               "Management OP, Net income) for an org and period, with comparisons (PY, Budget, FCs). "
+    "get_pnl": "General-ledger P&L statement (Billing, WIP, Revenue, Production, costs, Gross profit, Operating profit, "
+               "EBIT, Net income) for an org and period, with comparisons (PY, Budget, FCs). "
                "Use for 'how is X doing', overall performance, P&L questions.",
     "get_trend": "Monthly series of a metric or ratio (Actual vs PY vs Budget). Use for trend / over time / since / what happened.",
-    "get_ratio": "One ratio for an org and period vs comparisons (e.g. personnel_to_revenue, maop_margin_revenue).",
+    "get_ratio": "One ratio for an org and period vs comparisons (e.g. personnel_to_revenue, maop_margin_revenue = operating margin).",
     "variance_drivers": "Explain a variance: drills the account tree and the org children and ranks contributions. "
                         "Use for why / drivers / break down / split questions.",
     "rank_entities": "Rank org units (BU, business, product line, country, region) by a metric or ratio. "
                      "Use for top / bottom / best / worst / 'by product line' questions.",
     "compare_versions": "Actual vs Budget vs FC1/FC2/FC3 for key P&L lines.",
-    "get_kpi_cockpit": "Operational profitability cockpit: direct margin, production, direct labor cost, utilization, "
+    "get_kpi_cockpit": "Operational profitability cockpit: direct margin, production, direct staff costs, utilization, "
                        "production per hour / per FTE, overtime ratio, hourly cost - MTD and YTD vs LY and Budget.",
+    "get_workforce": "Workforce from fictional employee records (closed months, vs prior year): headcount, FTE, hires, "
+                     "leavers, attrition, utilization and overtime by role, grade, direct / indirect staff, month or org "
+                     "level. Use for attrition / turnover / hires / leavers questions and for headcount or utilization "
+                     "by role, grade or staff type.",
     "run_readonly_sql": "FALLBACK ONLY when no other tool fits: one SELECT on the reporting views.",
 }
 
@@ -890,6 +1100,7 @@ TOOLS: dict[str, tuple[type[BaseModel], Callable]] = {
     "rank_entities": (RankEntitiesArgs, tool_rank_entities),
     "compare_versions": (CompareVersionsArgs, tool_compare_versions),
     "get_kpi_cockpit": (GetKpiCockpitArgs, tool_get_kpi_cockpit),
+    "get_workforce": (GetWorkforceArgs, tool_get_workforce),
     "run_readonly_sql": (RunReadonlySqlArgs, tool_run_readonly_sql),
 }
 DATA_TOOLS = [t for t in TOOLS if t != "resolve_entities"]

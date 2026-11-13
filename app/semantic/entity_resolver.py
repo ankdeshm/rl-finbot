@@ -104,8 +104,16 @@ INTENT_PATTERNS = {
     "rank": r"\b(top|bottom|rank|ranking|ranked|best|worst|highest|lowest|largest|smallest|biggest|leaders|laggards|which (bu|bus|business|businesses|country|countries|product line|product lines|region|regions))\b",
     "breakdown": r"\b(break ?down|breakdown|split|composition|mix|components|by account|detail|details|drill)\b",
     "versions": r"\b(versions|budget vs\.? fc|fc\d? vs|vs\.? fc\d|forecast vs|vs\.? forecast|compare (the )?(budget|forecast|fc))\b",
-    "pnl": r"(p&l|\bpnl\b|p and l|income statement|profit and loss|\bstatement\b|full p ?& ?l|\bad50\b)",
+    "pnl": r"(p&l|\bpnl\b|p and l|income statement|profit and loss|\bstatement\b|full p ?& ?l|\bgeneral ledger\b|\bgl\b)",
     "cockpit": r"\b(cockpit|kpis?|dashboard|operational profitability|scorecard|key metrics|key figures|performance overview|direct margin drivers)\b",
+    # employee records: attrition, hires / leavers, and anything by role, grade or staff type ("turnover" alone
+    # is revenue; "staff turnover" / "turnover rate" is attrition)
+    "workforce": r"\b(attrition|churn|retention|leavers?|resign\w*|quits?|layoffs?|laid off|redundanc\w*|"
+                 r"hires|new hires?|hiring|hired|joiners?|new starters?|recruit\w*|workforce|grades?|seniority|"
+                 r"staff types?|job roles?|roles|by role|per role|each role)\b"
+                 r"|\b(staff|employee|people|personnel)\s+turnover\b|\bturnover rate\b"
+                 r"|\b(employees|people|staff|headcount)\s+(have\s+|has\s+)?left\b|\bhow many (employees|people)\b"
+                 r"|\bdirect\s+(vs\.?|versus|and)\s+indirect\s+(staff|employees|people|headcount)\b(?!\s+costs?)",
 }
 LEVEL_PATTERNS = [
     ("l6_bu", r"\b(by|per|each|across|which|all|top|bottom|worst|best)\s+(\d+\s+)?(bus|bu|business units?)\b|\bbus\b|\bbu by bu\b"),

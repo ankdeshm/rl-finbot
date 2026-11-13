@@ -5,7 +5,7 @@
        +-- refuse/clarify --+-- tool error -+--> finalize  (guard may loop back to write once)
 
 * preprocess: deterministic entity resolution, conversation memory merge (follow-ups such as
-  "now for Canada", "split 7A by BU", "same vs FC2"), access check (polite refusal, never data).
+  "now for Canada", "split direct staff costs by BU", "same vs FC2"), access check (polite refusal, never data).
 * plan:       the LLM chooses the tool and arguments (native tool calling via LiteLLM). If the model
               produces no usable call, a deterministic router supplies one (tracked as a fallback).
 * act:        tools run SQLAlchemy Core queries; the LLM never does arithmetic.
@@ -34,6 +34,7 @@ from app.semantic.access import check_access, child_level, default_org, level_la
 from app.semantic.dims import dims
 from app.semantic.entity_resolver import LEVEL_LABEL, Resolution, org_label, resolve
 from app.semantic.registry import registry
+from app.viz import format as F
 from app.viz.charts import chart_spec
 from app.viz.tables import build_table
 
@@ -198,6 +199,9 @@ def route_deterministic(mg: dict) -> dict:
     level = mg.get("level_hint")
     if "cockpit" in intents:
         return {"name": "get_kpi_cockpit", "arguments": {"org": org_txt, "month": ptxt if p and p["type"] == "MONTH" else ""}}
+    if "workforce" in intents or (mg.get("tool") == "get_workforce" and not intents):
+        return {"name": "get_workforce", "arguments": {"org": org_txt, "period": ptxt, "group_by": "", "metric": "",
+                                                       "top_n": mg.get("top_n") or 0}}
     if mg.get("tool") and not intents and mg["tool"] in TOOLS:
         tool = mg["tool"]
         intents = {"get_trend": {"trend"}, "variance_drivers": {"why"}, "rank_entities": {"rank"},
@@ -317,25 +321,27 @@ def make_followups(primary: ToolOutput | None, mg: dict, user_id: str) -> list[s
     org = org_label(org_f)
     lvl = child_level(org_f) or "l6_bu"
     child = LEVEL_LABEL.get(lvl, "BU").lower()
+    children = F.plural(child) if child != "bu" else "BUs"
     reg = registry()
     kind = primary.kind if primary else ""
     meta = primary.meta if primary else {}
-    mname = meta.get("name") or "MAOP"
+    op = reg.metrics["maop"].name.lower()                    # "operating profit"
+    mname = meta.get("name") or reg.metrics["maop"].name
     year = ti.ym(ti.last_closed_month())[0]
     if kind == "pnl":
-        return [f"What are the main drivers of the MAOP variance vs budget for {org}?",
-                f"Show the monthly MAOP trend for {org} vs last year",
-                f"Which {child}s in {org} have the lowest MAOP margin this year?"]
+        return [f"What are the main drivers of the {op} variance vs budget for {org}?",
+                f"Show the monthly {op} trend for {org} vs last year",
+                f"Which {children} in {org} have the lowest operating margin this year?"]
     if kind == "trend":
         return [f"Why did {mname} change vs last year for {org}?",
-                f"Rank {child}s in {org} by {mname} this year",
+                f"Rank {children} in {org} by {mname} this year",
                 f"Compare Budget vs FC3 vs Actual for {org}"]
     if kind == "ratio":
         return [f"Show the {mname} trend for {org} since {year - 2}",
-                f"Rank {child}s in {org} by {mname} this year",
+                f"Rank {children} in {org} by {mname} this year",
                 f"What drives the change in {mname} vs last year for {org}?"]
     if kind == "drivers":
-        top = (primary.data[0]["Driver"] if primary.data else None) or "personnel charges"
+        top = (primary.data[0]["Driver"] if primary.data else None) or "personnel costs"
         top = re.sub(r" as % of .*", "", str(top))
         return [f"Show the monthly trend of {mname} for {org} since {year - 1}",
                 f"Show the {top} trend for {org} vs budget",
@@ -346,19 +352,27 @@ def make_followups(primary: ToolOutput | None, mg: dict, user_id: str) -> list[s
         other = "bottom" if not meta.get("ascending") else "top"
         return [f"Why is {first} where it is on {mname}?",
                 f"Show the {mname} trend for {first} since {year - 1}",
-                f"Show the {other} 5 {lvl_lbl}s by {mname} in {org} instead"]
+                f"Show the {other} 5 {F.plural(lvl_lbl)} by {mname} in {org} instead"]
     if kind == "versions":
         return [f"Why is Actual different from Budget for {org} this year?",
-                f"Show the MAOP trend vs Budget for {org} this year",
+                f"Show the {op} trend vs Budget for {org} this year",
                 f"What does the latest forecast say for the full year {year} for {org}?"]
     if kind == "cockpit":
         return [f"Why did direct margin change vs last year for {org}?",
                 f"Show the utilization rate trend for {org} since {year - 1}",
-                f"Rank {child}s in {org} by direct margin this year"]
+                f"Rank {children} in {org} by direct margin this year"]
+    if kind == "workforce":
+        group = meta.get("group")
+        opts = [("role", f"Show attrition by role for {org} this year"),
+                ("grade", f"Show utilization by grade for {org} this year"),
+                ("month", f"Show headcount, hires and leavers by month for {org} this year"),
+                (lvl, f"Which {children} in {org} have the highest attrition this year?"),
+                ("pnl", f"How is the {op} of {org} YTD vs last year and budget?")]
+        return [q for g, q in opts if g != group][:3]
     scope = scope_label(user_id)
-    return [f"How is MAOP YTD vs last year and budget for {scope}?",
+    return [f"How is {op} YTD vs last year and budget for {scope}?",
             f"Show the operational profitability cockpit for {scope}",
-            f"Show the MAOP margin trend for {scope} since {year - 1}"]
+            f"Show the operating margin trend for {scope} since {year - 1}"]
 
 
 # ------------------------------------------------------------------------------------------
@@ -554,8 +568,9 @@ def node_finalize(state: AgentState) -> AgentState:
     new_mem = dict(state.get("memory") or {})
     if primary:
         args = primary.meta.get("args", {})
+        wf = primary.tool == "get_workforce"         # its "metric" (attrition, hires) is not a P&L metric
         new_mem = {"org_filter": filters.get("org_filter") or mg.get("org_filter") or {},
-                   "metric": mg.get("metric") or args.get("metric") or args.get("metric_or_ratio"),
+                   "metric": mg.get("metric") or (None if wf else args.get("metric")) or args.get("metric_or_ratio"),
                    "ratio": mg.get("ratio") or args.get("ratio_name"),
                    "period": mg.get("period"), "period_is_range": mg.get("period_is_range", False),
                    "versions": mg.get("versions") or [], "comparisons": mg.get("comparisons") or [],
@@ -566,6 +581,13 @@ def node_finalize(state: AgentState) -> AgentState:
             new_mem.update({"entities": [str(r.get(lbl)) for r in primary.data][:25],
                             "entities_level": primary.meta.get("level"),
                             "entities_ascending": bool(primary.meta.get("ascending"))})
+        elif primary.kind == "workforce":
+            new_mem.update({"wf_group": primary.meta.get("group"), "wf_focus": primary.meta.get("focus")})
+            if primary.meta.get("level") and primary.data:
+                lbl = primary.meta.get("level_label")
+                new_mem.update({"entities": [str(r.get(lbl)) for r in primary.data if r.get("_kind") != "subtotal"][:25],
+                                "entities_level": primary.meta.get("level"),
+                                "entities_ascending": bool(primary.meta.get("ascending"))})
         elif primary.kind == "drivers" and (primary.extra or {}).get("org") and primary.meta.get("org_level"):
             rows = primary.extra["org"]
             lbl = [k for k in rows[0] if k not in (primary.meta.get("current"), primary.meta.get("comparison"),

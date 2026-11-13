@@ -1,7 +1,7 @@
 """Metric registry built from app/semantic/metrics.yaml + the chart of accounts (dim_account).
 
 Every metric resolves to a column of the "wide" frame produced by query_builder:
-  L1..L21   AD50 P&L lines (subtotals computed)   7A / 7B   account groups
+  L1..L21   P&L lines by internal key (subtotals)  7A / 7B   account groups (direct / indirect staff)
   DM / DMS  computed amounts (direct margin)       <l3_code> leaf accounts (e.g. 7A2, 9.3)
   <stat>_sum statistics (FTE, headcount, hours) + n_months
 """
@@ -208,7 +208,7 @@ def registry() -> Registry:
         code = str(a["l3_code"])
         mid = f"acct:{code}"
         reg.metrics[mid] = MetricDef(
-            id=mid, name=f"{code} {a['l3_name']}", kind="leaf", column=code, code=code,
+            id=mid, name=str(a['l3_name']), kind="leaf", column=code, code=code,
             natural_sign=int(a["natural_sign"]), favorable=str(a["favorable_direction"]),
             line=int(a["line_no"]), synonyms=tuple(extra.get(code, [])) + (str(a["l3_name"]),))
     for c in spec.get("computed", []):

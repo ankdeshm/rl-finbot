@@ -40,9 +40,9 @@ JOIN dbo.dim_version AS v ON v.version_id = f.version_id
 JOIN dbo.dim_period  AS p ON p.month_key  = f.month_key;
 GO
 
--- AD50 P&L by line INCLUDING the computed subtotals:
---   3 REVENUE = 1+2, 6 PRODUCTION = 3+4+5, 11 GROSS PROFIT = 6+7+8+9+10, 13 MAOP = 11+12,
---   18 MANAGEMENT OP = 13+17, 21 NET INCOME = 18+19+20
+-- P&L by line INCLUDING the computed subtotals (internal line keys):
+--   3 REVENUE = 1+2, 6 PRODUCTION = 3+4+5, 11 GROSS PROFIT = 6+7+8+9+10, 13 OPERATING PROFIT = 11+12,
+--   18 EBIT = 13+17, 21 NET INCOME = 18+19+20
 CREATE OR ALTER VIEW dbo.v_pnl AS
 WITH line_sum AS (
     SELECT f.month_key, f.bu_id, f.version_id, a.line_no, SUM(f.amount_usd) AS amount_usd
@@ -90,4 +90,23 @@ FROM dbo.fact_stats AS s
 JOIN dbo.dim_org     AS o ON o.bu_id      = s.bu_id
 JOIN dbo.dim_version AS v ON v.version_id = s.version_id
 JOIN dbo.dim_period  AS p ON p.month_key  = s.month_key;
+GO
+
+-- Fictional employees with org attributes (codes only, no names)
+CREATE OR ALTER VIEW dbo.v_employee AS
+SELECT e.employee_id, e.employee_code, e.role, e.grade, e.staff_type, e.fte_pct, e.hire_date, e.leave_date,
+       e.leave_reason, e.bu_id, o.bu_name, o.l5_business, o.l4_product_line, o.l3_country, o.l2_region, o.l1_group
+FROM dbo.dim_employee AS e
+JOIN dbo.dim_org      AS o ON o.bu_id = e.bu_id;
+GO
+
+-- Employee x month (Actual): FTE, hours, hires and leavers
+CREATE OR ALTER VIEW dbo.v_employee_month AS
+SELECT f.month_key, p.year, p.quarter, p.month, f.employee_id, e.employee_code, e.role, e.grade, e.staff_type,
+       e.leave_reason, f.bu_id, o.bu_name, o.l5_business, o.l4_product_line, o.l3_country, o.l2_region, o.l1_group,
+       f.fte, f.available_hours, f.billable_hours, f.overtime_hours, f.is_hire, f.is_leaver
+FROM dbo.fact_employee_month AS f
+JOIN dbo.dim_employee AS e ON e.employee_id = f.employee_id
+JOIN dbo.dim_org      AS o ON o.bu_id       = f.bu_id
+JOIN dbo.dim_period   AS p ON p.month_key   = f.month_key;
 GO

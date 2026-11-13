@@ -33,21 +33,26 @@ PERSONA_LABEL = {"group_cfo": "Group CFO", "us_country_head": "United States Cou
 
 # (persona, [questions]) - questions inside one session share conversation memory (follow-ups).
 SESSIONS: list[tuple[str, list[str]]] = [
-    ("group_cfo", ["How is MAOP YTD vs last year and budget for the United States?", "now for Canada"]),
+    ("group_cfo", ["How is operating profit YTD vs last year and budget for the United States?", "now for Canada"]),
     ("group_cfo", ["Show personnel cost as % of revenue trend for Environmental Lab Testing since 2023"]),
-    ("group_cfo", ["Why did Brazil Environmental Lab Testing margin drop in 2026?"]),
-    ("group_cfo", ["Top 5 BUs by MAOP margin in US & Canada this year"]),
+    ("group_cfo", ["Why did Canada Environmental Lab Testing margin drop in 2026?"]),
+    ("group_cfo", ["Top 5 BUs by operating margin in US & Canada this year"]),
     ("group_cfo", ["Compare Budget vs FC2 vs Actual for Chile Metals & Minerals"]),
-    ("group_cfo", ["Break down 7A personnel cost for US Elevators & Pressure Vessels in March 2025"]),
+    ("group_cfo", ["Break down direct staff costs for US Elevators & Pressure Vessels in March 2025"]),
     ("group_cfo", ["What happened to WIP in Mexico Buildings & Infrastructure this year?"]),
     ("group_cfo", ["Subcontracting cost by product line YTD vs PY"]),
     ("group_cfo", ["Show the operational profitability cockpit for Canada"]),
     ("group_cfo", ["What is the utilization rate in Mexico vs budget?"]),
-    ("group_cfo", ["How has the MAOP margin of Canada Power & Utilities developed since 2022?"]),
-    ("group_cfo", ["Which countries have the lowest MAOP margin this year?", "why is the first one so low?"]),
-    ("us_country_head", ["How is MAOP YTD for Brazil?"]),
+    ("group_cfo", ["How has the operating margin of Canada Power & Utilities developed since 2022?"]),
+    ("group_cfo", ["Which countries have the lowest operating margin this year?", "why is the first one so low?"]),
+    ("group_cfo", ["Headcount, hires and leavers by month for Canada Environmental Lab Testing this year"]),
+    ("group_cfo", ["Attrition by role for Canada Environmental Lab Testing this year vs last year",
+                   "now for the United States"]),
+    ("group_cfo", ["Utilization rate by grade in the United States this year"]),
+    ("group_cfo", ["Which BUs have the highest attrition this year?"]),
+    ("us_country_head", ["How is operating profit YTD for Brazil?"]),
     ("us_country_head", ["How is the whole group doing this year vs budget?"]),
-    ("env_pl_leader", ["Rank countries by MAOP margin this year"]),
+    ("env_pl_leader", ["Rank countries by operating margin this year"]),
 ]
 
 

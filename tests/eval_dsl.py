@@ -1,14 +1,16 @@
 """Independent expected values for the golden questions.
 
 A small DSL compiled straight to SQL over the BASE tables (fact_pnl, fact_stats, dim_account,
-dim_org, dim_version). It deliberately does not use the semantic layer, the reporting views or the
-metric registry, so the evaluation checks the whole chain (entity resolution -> tool choice ->
-semantic layer -> SQL) against a separate computation of the same number.
+dim_org, dim_version, fact_employee_month, dim_employee). It deliberately does not use the semantic
+layer, the reporting views or the metric registry, so the evaluation checks the whole chain (entity
+resolution -> tool choice -> semantic layer -> SQL) against a separate computation of the same number.
 
 Spec keys (YAML):
     m: maop                     amount of a measure (see MEASURES), display sign (costs positive)
     s: fte                      statistic (stocks averaged over months, flows summed)
     r: [maop, revenue]          ratio of two measures / statistics; annualize: true for "per FTE"
+    w: attrition                workforce figure from the employee records (see WORKFORCE);
+                                emp: {staff_type: Direct} filters employees (role / grade / staff_type)
     org: {l3_country: Mexico}   org filter (value or list), default = whole group
     p: YTD-2026-10 | FY-2025 | M-2025-03 | Q-2025-3 | H1-2026 | R-2023-01:2026-10 | R12M-2026-10
     v: Actual (default) | Budget | FC1 | FC2 | FC3 | PY (= Actual, months shifted back 12)
@@ -47,6 +49,10 @@ MEASURES: dict[str, tuple[str, int]] = {
 }
 STATS = {"fte": "avg", "headcount": "avg", "direct_fte": "avg", "billable_hours": "sum",
          "available_hours": "sum", "overtime_hours": "sum"}
+# workforce figure -> display format (attrition = leavers x 12 / months / average headcount)
+WORKFORCE = {"headcount": "num", "fte": "num", "hires": "num", "leavers": "num", "restructuring_leavers": "num",
+             "attrition": "pct", "voluntary_attrition": "pct", "utilization": "pct", "overtime": "pct"}
+EMP_COLS = ("role", "grade", "staff_type")
 LEVELS = ("l1_group", "l2_region", "l3_country", "l4_product_line", "l5_business", "l6_bu")
 
 
@@ -170,11 +176,49 @@ def _component(name: str, org, version, months, group=None, raw_sum=False):
     raise ValueError(f"unknown measure/stat {name}")
 
 
+def workforce(name: str, org: dict | None, months: list[int], group: str | None = None, emp: dict | None = None):
+    """Workforce figure from the employee records (Actual months). Averages are over all months of
+    the period; attrition (annualised) = leavers x 12 / months / average headcount."""
+    if name not in WORKFORCE:
+        raise ValueError(f"unknown workforce figure {name}")
+    params = {"m0": min(months), "m1": max(months)}
+    flt = ""
+    for i, (col, val) in enumerate((emp or {}).items()):
+        if col not in EMP_COLS:
+            raise ValueError(f"bad employee filter {col}")
+        params[f"e{i}"] = val
+        flt += f" AND e.{col} = :e{i}"
+    gsel = f"o.{group}, " if group else ""
+    rows = _q(f"""SELECT {gsel}COUNT(*), SUM(f.fte), SUM(CAST(f.is_hire AS INT)), SUM(CAST(f.is_leaver AS INT)),
+                         SUM(CASE WHEN e.leave_reason = 'Restructuring' THEN CAST(f.is_leaver AS INT) ELSE 0 END),
+                         SUM(f.billable_hours), SUM(f.available_hours), SUM(f.overtime_hours)
+                  FROM fact_employee_month f
+                  JOIN dim_employee e ON e.employee_id = f.employee_id
+                  JOIN dim_org o ON o.bu_id = f.bu_id
+                  WHERE f.month_key BETWEEN :m0 AND :m1{_org_sql(org, params)}{flt}
+                  {'GROUP BY o.' + group if group else ''}""", params)
+    n = len(months)
+
+    def val(r):
+        cnt, fte, hires, leavers, restr, bill, avail, over = (float(x or 0) for x in r)
+        return {"headcount": cnt / n, "fte": fte / n, "hires": hires, "leavers": leavers,
+                "restructuring_leavers": restr,
+                "attrition": leavers * 12.0 / cnt if cnt else None,
+                "voluntary_attrition": (leavers - restr) * 12.0 / cnt if cnt else None,
+                "utilization": bill / avail if avail else None,
+                "overtime": over / avail if avail else None}[name]
+    if group:
+        return {r[0]: val(r[1:]) for r in rows}
+    return val(rows[0])
+
+
 def _fmt(spec: dict) -> str:
     if "m" in spec:
         return "eur"
     if "s" in spec:
         return "num"
+    if "w" in spec:
+        return WORKFORCE[spec["w"]]
     num, den = spec["r"]
     if den in STATS and STATS[den] == "avg":
         return "eur"                       # per FTE (annualised) -> money
@@ -188,6 +232,8 @@ def _value(spec: dict, org, version, months, group=None):
         return _component(spec["m"], org, version, months, group)
     if "s" in spec:
         return _component(spec["s"], org, version, months, group)
+    if "w" in spec:
+        return workforce(spec["w"], org, months, group, spec.get("emp"))
     num_n, den_n = spec["r"]
     annual = bool(spec.get("annualize"))
     num = _component(num_n, org, version, months, group)

@@ -29,7 +29,7 @@ pinned: false
 
 # RL Finance Copilot (synthetic data)
 
-Conversational finance analytics over a synthetic AD50 management P&L of a fictional Testing,
+Conversational finance analytics over a synthetic general-ledger management P&L of a fictional Testing,
 Inspection & Certification company. DuckDB backend; the LLM is `{model}`.
 All figures are synthetic.
 """

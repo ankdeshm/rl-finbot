@@ -12,7 +12,7 @@ def _bridge(values: list[float]) -> dict:
 
 
 def test_small_step_bridge_zooms_axis():
-    # MAOP PY 51.0M, steps of a few M, Actual 54.5M: the axis must not start at zero.
+    # Operating profit PY 51.0M, steps of a few M, Actual 54.5M: the axis must not start at zero.
     values = [51.0e6, 3.5e6, -2.0e6, 1.0e6, 1.0e6, 54.5e6]
     rng = figure(_bridge(values)).layout.yaxis.range
     assert rng is not None
@@ -22,7 +22,7 @@ def test_small_step_bridge_zooms_axis():
 
 
 def test_large_drop_bridge_keeps_zero_axis():
-    # Production 1,325M down to MAOP 187M: steps are large, keep the default axis.
+    # Production 1,325M down to Operating profit 187M: steps are large, keep the default axis.
     values = [1325e6, -600e6, -300e6, -238e6, 187e6]
     assert figure(_bridge(values)).layout.yaxis.range is None
     assert waterfall_range([1325.0, -600.0, -300.0, -238.0, 187.0],

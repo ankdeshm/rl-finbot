@@ -8,23 +8,23 @@ from app.config import ROOT
 
 st_testing = pytest.importorskip("streamlit.testing.v1")
 APP = str(ROOT / "app" / "ui" / "streamlit_app.py")
-N_EXAMPLES = 8
+BUTTONS = [f"ex_{i}" for i in range(8)] + [f"exw_{i}" for i in range(4)]
 
 
-def _run_example(i: int, monkeypatch):
+def _run_example(key: str, monkeypatch):
     monkeypatch.setenv("LLM_MODEL", "rules")
     monkeypatch.setenv("LLM_MODEL_CHOICES", "")
     at = st_testing.AppTest.from_file(APP, default_timeout=180)
     at.run()
     assert not at.exception, at.exception
-    at.button(key=f"ex_{i}").click().run()
+    at.button(key=key).click().run()
     assert not at.exception, at.exception
     return at
 
 
-@pytest.mark.parametrize("i", range(N_EXAMPLES))
-def test_example_renders_text_table_chart_followups(i, monkeypatch):
-    at = _run_example(i, monkeypatch)
+@pytest.mark.parametrize("key", BUTTONS)
+def test_example_renders_text_table_chart_followups(key, monkeypatch):
+    at = _run_example(key, monkeypatch)
     md = [m.value for m in at.markdown]
     assert any("fin-table" in v for v in md), "finance table missing"
     assert len(at.get("plotly_chart")) >= 1, "chart missing"
@@ -37,7 +37,7 @@ def test_example_renders_text_table_chart_followups(i, monkeypatch):
 
 
 def test_followup_button_runs_second_turn(monkeypatch):
-    at = _run_example(0, monkeypatch)
+    at = _run_example("ex_0", monkeypatch)
     fu = [b for b in at.button if b.key and b.key.startswith("fu_")][0]
     fu.click().run()
     assert not at.exception, at.exception
@@ -49,6 +49,6 @@ def test_restricted_persona_gets_refusal(monkeypatch):
     at = st_testing.AppTest.from_file(APP, default_timeout=180)
     at.run()
     at.selectbox[0].select("United States Country Head").run()
-    at.chat_input[0].set_value("How is MAOP YTD for Brazil?").run()
+    at.chat_input[0].set_value("How is operating profit YTD for Brazil?").run()
     assert not at.exception, at.exception
     assert any("rl-refusal" in m.value for m in at.markdown)

@@ -1,7 +1,7 @@
 -- =============================================================================
 -- RL FinBot - star schema (SQL Server 2022)
 -- Storage rule: amounts are SIGNED (revenue +, cost -) and stored at LEAF accounts only.
--- Subtotals (Revenue, Production, Gross profit, MAOP, Management OP, Net income) are never
+-- Subtotals (Revenue, Production, Gross profit, Operating profit, EBIT, Net income) are never
 -- stored; the semantic layer always computes them from leaves.
 -- Executed by scripts/load_mssql.py (split on GO). The part after the POST_LOAD marker runs
 -- after the bulk load (index build is faster on loaded tables).
@@ -19,6 +19,8 @@ SELECT @sql += N'DROP VIEW ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTEN
 FROM sys.views WHERE SCHEMA_NAME(schema_id) = N'dbo' AND name LIKE N'v[_]%';
 EXEC sp_executesql @sql;
 GO
+DROP TABLE IF EXISTS dbo.fact_employee_month;
+DROP TABLE IF EXISTS dbo.dim_employee;
 DROP TABLE IF EXISTS dbo.fact_pnl;
 DROP TABLE IF EXISTS dbo.fact_stats;
 DROP TABLE IF EXISTS dbo.user_org_access;
@@ -50,7 +52,7 @@ CREATE TABLE dbo.dim_org (
 -- display order and hierarchy only.
 CREATE TABLE dbo.dim_account (
     account_id           INT            NOT NULL,
-    line_no              INT            NOT NULL,   -- AD50 line 1..21 (14-16 unused)
+    line_no              INT            NOT NULL,   -- internal line key 1..21 (14-16 unused)
     l1_name              NVARCHAR(100)  NOT NULL,   -- P&L line name
     l2_code              NVARCHAR(10)   NOT NULL,   -- e.g. 7A (or the line number)
     l2_name              NVARCHAR(100)  NOT NULL,
@@ -88,7 +90,7 @@ CREATE TABLE dbo.fact_pnl (
     bu_id       INT            NOT NULL,
     account_id  INT            NOT NULL,
     version_id  INT            NOT NULL,
-    amount_usd  DECIMAL(18,2)  NOT NULL,            -- signed USD (budget rate B26): revenue +, cost -
+    amount_usd  DECIMAL(18,2)  NOT NULL,            -- signed USD (constant budget rate): revenue +, cost -
     CONSTRAINT pk_fact_pnl PRIMARY KEY (version_id, month_key, bu_id, account_id)
 );
 
@@ -103,6 +105,36 @@ CREATE TABLE dbo.fact_stats (
     available_hours DECIMAL(12,1)  NOT NULL,        -- available hours of direct staff (flow)
     overtime_hours  DECIMAL(12,1)  NOT NULL,        -- overtime hours of direct staff (flow)
     CONSTRAINT pk_fact_stats PRIMARY KEY (version_id, month_key, bu_id)
+);
+
+-- Fictional employees (codes only: no names or personal attributes). Monthly hours, FTE and
+-- headcount add up exactly to fact_stats (Actual) per BU and month.
+CREATE TABLE dbo.dim_employee (
+    employee_id    INT            NOT NULL,
+    employee_code  NVARCHAR(12)   NOT NULL,         -- e.g. E100123
+    bu_id          INT            NOT NULL,
+    role           NVARCHAR(40)   NOT NULL,         -- e.g. Inspector, Lab technician, Manager
+    grade          NVARCHAR(4)    NOT NULL,         -- G1 (junior) .. G5 (senior)
+    staff_type     NVARCHAR(10)   NOT NULL,         -- Direct (billable) / Indirect
+    fte_pct        DECIMAL(4,2)   NOT NULL,         -- 1.00, 0.80, 0.50
+    hire_date      DATE           NOT NULL,
+    leave_date     DATE           NULL,
+    leave_reason   NVARCHAR(20)   NULL,             -- Voluntary / Restructuring
+    CONSTRAINT pk_dim_employee PRIMARY KEY (employee_id)
+);
+
+-- One row per employee and month on payroll (Actual months only).
+CREATE TABLE dbo.fact_employee_month (
+    month_key        INT            NOT NULL,
+    employee_id      INT            NOT NULL,
+    bu_id            INT            NOT NULL,       -- BU at that month (used by row-level security)
+    fte              DECIMAL(4,2)   NOT NULL,
+    available_hours  DECIMAL(8,1)   NOT NULL,       -- direct staff only (0 for indirect)
+    billable_hours   DECIMAL(8,1)   NOT NULL,
+    overtime_hours   DECIMAL(8,1)   NOT NULL,
+    is_hire          BIT            NOT NULL,       -- first month on payroll
+    is_leaver        BIT            NOT NULL,       -- last month on payroll
+    CONSTRAINT pk_fact_employee_month PRIMARY KEY (employee_id, month_key)
 );
 
 CREATE TABLE dbo.app_user (
@@ -129,8 +161,16 @@ ALTER TABLE dbo.fact_pnl   ADD CONSTRAINT fk_fact_pnl_period  FOREIGN KEY (month
 ALTER TABLE dbo.fact_stats ADD CONSTRAINT fk_fact_stats_org     FOREIGN KEY (bu_id)      REFERENCES dbo.dim_org (bu_id);
 ALTER TABLE dbo.fact_stats ADD CONSTRAINT fk_fact_stats_version FOREIGN KEY (version_id) REFERENCES dbo.dim_version (version_id);
 ALTER TABLE dbo.fact_stats ADD CONSTRAINT fk_fact_stats_period  FOREIGN KEY (month_key)  REFERENCES dbo.dim_period (month_key);
+ALTER TABLE dbo.dim_employee ADD CONSTRAINT fk_dim_employee_org FOREIGN KEY (bu_id) REFERENCES dbo.dim_org (bu_id);
+ALTER TABLE dbo.fact_employee_month ADD CONSTRAINT fk_fem_employee FOREIGN KEY (employee_id) REFERENCES dbo.dim_employee (employee_id);
+ALTER TABLE dbo.fact_employee_month ADD CONSTRAINT fk_fem_org      FOREIGN KEY (bu_id)       REFERENCES dbo.dim_org (bu_id);
+ALTER TABLE dbo.fact_employee_month ADD CONSTRAINT fk_fem_period   FOREIGN KEY (month_key)   REFERENCES dbo.dim_period (month_key);
 GO
 -- Columnstore index for fast aggregations over ~1M fact rows
 CREATE NONCLUSTERED COLUMNSTORE INDEX ncci_fact_pnl
     ON dbo.fact_pnl (version_id, month_key, bu_id, account_id, amount_usd);
+GO
+CREATE NONCLUSTERED COLUMNSTORE INDEX ncci_fact_employee_month
+    ON dbo.fact_employee_month (month_key, bu_id, employee_id, fte, available_hours, billable_hours,
+                                overtime_hours, is_hire, is_leaver);
 GO

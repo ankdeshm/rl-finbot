@@ -35,14 +35,20 @@ PERSONAS = {
     "Environmental Lab Testing PL Leader": "env_pl_leader",
 }
 EXAMPLES = [
-    "How is MAOP YTD vs last year and budget for the United States?",
+    "How is operating profit YTD vs last year and budget for the United States?",
     "Show personnel cost as % of revenue trend for Environmental Lab Testing since 2023",
-    "Why did Brazil Environmental Lab Testing margin drop in 2026?",
-    "Top 5 BUs by MAOP margin in US & Canada this year",
+    "Why did Canada Environmental Lab Testing margin drop in 2026?",
+    "Top 5 BUs by operating margin in US & Canada this year",
     "Compare Budget vs FC2 vs Actual for Chile Metals & Minerals",
-    "Break down 7A personnel cost for US Elevators & Pressure Vessels in March 2025",
+    "Break down direct staff costs for US Elevators & Pressure Vessels in March 2025",
     "What happened to WIP in Mexico Buildings & Infrastructure this year?",
     "Subcontracting cost by product line YTD vs PY",
+]
+WORKFORCE_EXAMPLES = [
+    "Headcount, hires and leavers by month for Canada Environmental Lab Testing this year",
+    "Attrition by role for Canada Environmental Lab Testing this year vs last year",
+    "Utilization rate by grade in the United States this year",
+    "Which BUs have the highest attrition this year?",
 ]
 EXTRA_EXAMPLES = [
     "Show the operational profitability cockpit for Canada",
@@ -88,7 +94,7 @@ def model_choices() -> list[str]:
 def sidebar() -> dict:
     with st.sidebar:
         st.markdown(f"### 📊 {COMPANY}")
-        st.caption("Finance Copilot · AD50 management P&L")
+        st.caption("Finance Copilot · general ledger (GL) management P&L")
         persona = st.selectbox("Persona", list(PERSONAS), index=list(PERSONAS).index(st.session_state.persona))
         if persona != st.session_state.persona:
             st.session_state.persona = persona
@@ -111,33 +117,36 @@ def sidebar() -> dict:
             st.session_state.messages, st.session_state.memory = [], {}
             st.rerun()
         last = ti.last_closed_month(as_of)
-        st.caption(f"Backend: {backend()} · last closed month: {ti.month_label(last)} · {CUR} @ budget rate "
-                   f"{settings().get('fx_rate_code', 'B26')}")
+        st.caption(f"Backend: {backend()} · last closed month: {ti.month_label(last)} · {CUR} at "
+                   f"{settings().get('fx_rate_label', 'constant budget rate')}")
     return {"user_id": user_id, "as_of": as_of, "model": None if model.startswith("rules") else model,
             "model_label": model, "units": "M" if units.endswith("M") else "k"}
 
 
 def header() -> None:
     st.markdown(f"<div class='rl-header'><h1>{COMPANY} · Finance Copilot</h1>"
-                "<p>Ask finance questions in plain English: P&amp;L, variances, ratios, rankings, versions and "
-                "KPI cockpit. Every number comes from the database, never from the language model.</p></div>",
+                "<p>Ask finance questions in plain English: P&amp;L, variances, ratios, rankings, versions, "
+                "KPI cockpit and workforce. Every number comes from the database, never from the language model.</p></div>",
                 unsafe_allow_html=True)
-    st.markdown("<div class='rl-banner'>⚠️ <b>Synthetic data – prototype.</b> Fictional company and figures; "
+    st.markdown("<div class='rl-banner'>⚠️ <b>Synthetic data – prototype.</b> Fictional company, people and figures; "
                 "for demonstration only.</div>", unsafe_allow_html=True)
+
+
+def _example_buttons(questions: list[str], prefix: str, ncols: int = 2) -> None:
+    cols = st.columns(ncols)
+    for i, q in enumerate(questions):
+        if cols[i % ncols].button(q, key=f"{prefix}_{i}", width="stretch"):
+            st.session_state.pending = q
+            st.rerun()
 
 
 def landing() -> None:
     st.markdown("#### Try one of these")
-    cols = st.columns(2)
-    for i, q in enumerate(EXAMPLES):
-        if cols[i % 2].button(q, key=f"ex_{i}", width="stretch"):
-            st.session_state.pending = q
-            st.rerun()
+    _example_buttons(EXAMPLES, "ex")
+    st.markdown("#### Workforce (new): fictional employee records")
+    _example_buttons(WORKFORCE_EXAMPLES, "exw")
     with st.expander("More examples (KPI cockpit)"):
-        for i, q in enumerate(EXTRA_EXAMPLES):
-            if st.button(q, key=f"exx_{i}", width="stretch"):
-                st.session_state.pending = q
-                st.rerun()
+        _example_buttons(EXTRA_EXAMPLES, "exx", 1)
 
 
 def render_answer(ans: dict, idx: int, cfg: dict) -> None:
@@ -206,7 +215,7 @@ def process(question: str, cfg: dict) -> None:
     with st.chat_message("user"):
         st.markdown(question)
     with st.chat_message("assistant"):
-        with st.spinner("Analysing the P&L data ..."):
+        with st.spinner("Analysing the data ..."):
             t0 = time.time()
             try:
                 ans, mem = ask(question, user_id=cfg["user_id"], memory=st.session_state.memory,
@@ -234,7 +243,7 @@ def main() -> None:
                 st.markdown(m["content"])
             else:
                 render_answer(m["answer"], i, cfg)
-    typed = st.chat_input("Ask a finance question, e.g. 'How is MAOP YTD vs budget for Mexico?'")
+    typed = st.chat_input("Ask a finance question, e.g. 'How is operating profit YTD vs budget for Mexico?'")
     q = typed or st.session_state.pending
     if q:
         st.session_state.pending = None

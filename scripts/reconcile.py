@@ -2,12 +2,13 @@
 """Reconciliation report.
 
 1. Row counts per table and per version.
-2. 50 random BU x month x version samples: subtotals (Revenue, Production, Gross profit, MAOP,
-   Management OP, Net income)
+2. 50 random BU x month x version samples: subtotals (Revenue, Production, Gross profit, Operating
+   profit, EBIT, Net income)
    computed by the semantic layer == independent raw-SQL leaf sums == the generator's intended
    control totals.
 3. Integrity checks: facts only on leaf accounts, no Actuals for open months, forecast actual
-   months identical to Actuals, identical totals in SQL Server and DuckDB (when both exist).
+   months identical to Actuals, identical totals in SQL Server and DuckDB (when both exist), employee
+   totals (headcount, FTE, hours) identical to the BU statistics, one hire/leave flag per employee.
 Writes results/reconcile_report.md and exits non-zero on any mismatch.
 """
 from __future__ import annotations
@@ -91,6 +92,25 @@ def main(n_samples: int = 50) -> int:
                     diff_cnt += 1
         checks.append(("Forecast actual-months differing from Actual (month totals)", diff_cnt, 0))
 
+        # employees: monthly totals per BU must equal the Actual BU statistics
+        emp_mism = q(conn, """
+            SELECT COUNT(*) FROM fact_stats s
+            LEFT JOIN (SELECT bu_id, month_key, COUNT(*) AS hc, SUM(fte) AS fte, SUM(available_hours) AS av,
+                              SUM(billable_hours) AS bi, SUM(overtime_hours) AS ot
+                       FROM fact_employee_month GROUP BY bu_id, month_key) e
+              ON e.bu_id = s.bu_id AND e.month_key = s.month_key
+            WHERE s.version_id = 1 AND (e.hc IS NULL OR ABS(s.headcount - e.hc) > 0.005 OR ABS(s.fte - e.fte) > 0.005
+                  OR ABS(s.available_hours - e.av) > 0.05 OR ABS(s.billable_hours - e.bi) > 0.05
+                  OR ABS(s.overtime_hours - e.ot) > 0.05)""")[0][0]
+        checks.append(("BU-months where employee totals differ from the Actual BU statistics", emp_mism, 0))
+        open_emp = q(conn, "SELECT COUNT(*) FROM fact_employee_month f JOIN dim_period p ON p.month_key = f.month_key "
+                           "WHERE p.close_date > :d", d=data_as_of_date())[0][0]
+        checks.append(("Employee rows for months not yet closed", open_emp, 0))
+        multi = q(conn, "SELECT COUNT(*) FROM (SELECT employee_id FROM fact_employee_month GROUP BY employee_id "
+                        "HAVING SUM(CASE WHEN is_leaver = 1 THEN 1 ELSE 0 END) > 1 "
+                        "OR SUM(CASE WHEN is_hire = 1 THEN 1 ELSE 0 END) > 1) x")[0][0]
+        checks.append(("Employees with more than one hire or leave month", multi, 0))
+
         # samples
         ctrl = pd.read_parquet(ROOT / "data" / "control_totals.parquet")
         rng = random.Random(int(settings()["seed"]))
@@ -140,9 +160,9 @@ def main(n_samples: int = 50) -> int:
         failed += not same
 
     out(f"\n## Subtotal reconciliation: {n_samples} random BU x month x version samples\n")
-    out("Each sample checks Revenue, Production, Gross profit, MAOP, Management OP and Net income three ways: semantic layer "
+    out("Each sample checks Revenue, Production, Gross profit, Operating profit, EBIT and Net income three ways: semantic layer "
         f"vs raw SQL leaf sums (tolerance USD {TOL_SQL}) and vs generator control totals (tolerance USD {TOL_CTRL}).\n")
-    out("| BU | Month | Version | Production (USD) | MAOP (USD) | Status |\n|---|---|---|---:|---:|---|")
+    out("| BU | Month | Version | Production (USD) | Operating profit (USD) | Status |\n|---|---|---|---:|---:|---|")
     for bu, mkey, ver, prod, maop, ok in detail[:12]:
         out(f"| {bu} | {mkey} | {ver} | {prod:,.2f} | {maop:,.2f} | {'OK' if ok else 'MISMATCH'} |")
     out(f"| ... {len(detail) - 12} more samples | | | | | |")

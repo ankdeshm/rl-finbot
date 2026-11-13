@@ -17,6 +17,18 @@ def unit_label(units: str) -> str:
     return f"{CUR} {units}"
 
 
+def plural(word: str) -> str:
+    """English plural of an org level / group label: Country -> Countries, business -> businesses, BU -> BUs."""
+    w = str(word)
+    if w.isupper():
+        return w + "s"
+    if w.endswith("y") and len(w) > 1 and w[-2].lower() not in "aeiou":
+        return w[:-1] + "ies"
+    if w.endswith(("s", "x", "ch", "sh")):
+        return w + "es"
+    return w + "s"
+
+
 def eur(x: float | None, units: str = "auto", decimals: int | None = None, signed: bool = False) -> str:
     """Money in finance shorthand: USD 23.1M / USD 845k / USD 512 (auto) or fixed k / M units.
     (Name kept for backwards compatibility; the currency comes from settings.yaml.)"""

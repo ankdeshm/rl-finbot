@@ -12,10 +12,10 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import distinct, func, select
+from sqlalchemy import Integer, case, cast, distinct, func, select
 
 from app.config import as_of_date, backend, settings
-from app.db import dim_org, dim_version, fact_pnl, fact_stats, get_engine
+from app.db import dim_employee, dim_org, dim_version, fact_employee_month, fact_pnl, fact_stats, get_engine
 from app.semantic import time_intel as ti
 from app.semantic.access import allowed_bus, bus_for_filter, child_level, level_label
 from app.semantic.dims import dims
@@ -23,9 +23,23 @@ from app.semantic.entity_resolver import ORG_LEVELS, org_label
 from app.semantic.registry import MetricDef, RatioDef, registry
 
 CURRENCY = settings().get("currency", "USD")
-FX_RATE_CODE = f"{settings().get('fx_rate_code', 'B26')} (constant budget rate)"
+FX_RATE_CODE = str(settings().get("fx_rate_label", "constant budget rate"))
 KEY_LINES = ["production", "revenue", "personnel", "subcontracting", "other_cost", "functional_cost",
              "gross_profit", "maop", "management_op", "net_income"]
+
+# Workforce (fictional employee records): groupings and the main figures a question can ask for
+WF_GROUPS = {"role": "Role", "grade": "Grade", "staff_type": "Staff type", "month": "Month"}
+WF_METRICS = {   # id -> (column in the workforce table, display name, format, favourable direction)
+    "headcount": ("Avg headcount", "Average headcount", "num", "neutral"),
+    "fte": ("Avg FTE", "Average FTE", "num", "neutral"),
+    "hires": ("Hires", "Hires", "count", "neutral"),
+    "leavers": ("Leavers", "Leavers", "count", "down"),
+    "restructuring_leavers": ("of which restructuring", "Restructuring leavers", "count", "down"),
+    "attrition": ("Attrition", "Attrition rate (annualised)", "pct", "down"),
+    "voluntary_attrition": ("Voluntary attrition", "Voluntary attrition rate (annualised)", "pct", "down"),
+    "utilization": ("Utilization", "Utilization rate (direct staff, billable / available hours)", "pct", "up"),
+    "overtime": ("Overtime ratio", "Overtime ratio (direct staff, overtime / available hours)", "pct", "down"),
+}
 
 
 @dataclass
@@ -236,14 +250,14 @@ class SemanticLayer:
             code = str(a.l3_code)
             if not a.is_leaf and a.display_order % 100 == 0:
                 name = a.l1_name.upper() if a.is_subtotal else a.l1_name
-                rows.append({"col": f"L{a.line_no}", "label": f"{a.line_no} {name}", "code": str(a.line_no),
+                rows.append({"col": f"L{a.line_no}", "label": name, "code": str(a.line_no),
                              "kind": "subtotal" if a.is_subtotal else "line", "level": 0})
             elif not a.is_leaf:
                 if depth >= 2:
-                    rows.append({"col": code, "label": f"{code} {a.l2_name}", "code": code,
+                    rows.append({"col": code, "label": str(a.l2_name), "code": code,
                                  "kind": "group", "level": 1})
             elif depth >= 3:
-                rows.append({"col": code, "label": f"{code} {a.l3_name}", "code": code, "kind": "leaf",
+                rows.append({"col": code, "label": str(a.l3_name), "code": code, "kind": "leaf",
                              "level": 2 if a.l2_code in ("7A", "7B") else 1})
         return rows
 
@@ -633,4 +647,187 @@ class SemanticLayer:
                           "versions": ["Actual", "PY (LY)", "Budget"],
                           "period": f"MTD {ti.month_label(month_key)} and YTD {ti.month_label(month_key)}"}),
                       extra={"trend": trend.df})
+
+    # ------------------------------------------------------------------ workforce (employee records)
+    WF_SUMS = ["headcount", "fte", "available_hours", "billable_hours", "overtime_hours", "hires", "leavers",
+               "restructuring_leavers"]
+
+    def fetch_workforce(self, months, org_filter, group: str | None = None) -> pd.DataFrame:
+        """Employee-month records summed per month (and per `group`: role, grade, staff_type or an org
+        level). headcount = employees on payroll, hires / leavers = first / last month on payroll."""
+        gname = [group] if group else []
+        if not months:
+            return pd.DataFrame(columns=gname + ["month_key"] + self.WF_SUMS)
+        f, e, o = fact_employee_month, dim_employee, dim_org
+        gmap = {"role": e.c.role, "grade": e.c.grade, "staff_type": e.c.staff_type}
+        gcols = [gmap[group] if group in gmap else o.c[group]] if group else []
+        leaver = cast(f.c.is_leaver, Integer)
+        stmt = (select(*gcols, f.c.month_key,
+                       func.count().label("headcount"),
+                       func.sum(f.c.fte).label("fte"),
+                       func.sum(f.c.available_hours).label("available_hours"),
+                       func.sum(f.c.billable_hours).label("billable_hours"),
+                       func.sum(f.c.overtime_hours).label("overtime_hours"),
+                       func.sum(cast(f.c.is_hire, Integer)).label("hires"),
+                       func.sum(leaver).label("leavers"),
+                       func.sum(case((e.c.leave_reason == "Restructuring", leaver), else_=0)).label("restructuring_leavers"))
+                .select_from(f.join(e, f.c.employee_id == e.c.employee_id).join(o, f.c.bu_id == o.c.bu_id)))
+        stmt = self._where_months(stmt, f.c.month_key, months)
+        stmt = self._where_org(stmt, org_filter, f.c.bu_id)
+        stmt = stmt.group_by(*gcols, f.c.month_key)
+        self.sql_log.append(self._compile(stmt))
+        with self.engine.connect() as conn:
+            df = pd.read_sql(stmt, conn)
+        for c in self.WF_SUMS:
+            df[c] = df[c].astype(float)
+        df["month_key"] = df["month_key"].astype(int)
+        return df
+
+    def _wf_summary(self, df: pd.DataFrame, by: str | None, n_months: int) -> pd.DataFrame:
+        """Sum employee-month columns per `by` (None = one total row) and derive the rates:
+        averages over the period's months, attrition annualised = leavers x 12 / months / avg headcount."""
+        if by:
+            s = df.groupby(by)[self.WF_SUMS].sum().reset_index() if not df.empty else \
+                pd.DataFrame(columns=[by] + self.WF_SUMS)
+        else:
+            s = df[self.WF_SUMS].sum().to_frame().T
+        n = max(int(n_months), 1)
+        s["avg_headcount"] = s["headcount"] / n
+        s["avg_fte"] = s["fte"] / n
+        hc = s["avg_headcount"].replace(0, np.nan)
+        s["attrition"] = s["leavers"] * 12.0 / n / hc
+        s["voluntary_attrition"] = (s["leavers"] - s["restructuring_leavers"]) * 12.0 / n / hc
+        av = s["available_hours"].replace(0, np.nan)
+        s["utilization"] = s["billable_hours"] / av
+        s["overtime"] = s["overtime_hours"] / av
+        return s
+
+    def _wf_r12(self, months, org_filter) -> dict[int, tuple[float, float]]:
+        """Attrition over the rolling 12 months to each month: (all leavers, voluntary leavers) x 12 / sum of
+        monthly headcount in the window. Months with less than 12 months of history are left out."""
+        lo = ti.data_bounds()[0]
+        ext = [k for k in ti.month_range(ti.add_months(months[0], -11), months[-1]) if k >= lo]
+        df = self.fetch_workforce(ext, org_filter, None)
+        if df.empty:
+            return {}
+        s = df.groupby("month_key")[["headcount", "leavers", "restructuring_leavers"]].sum().reindex(ext, fill_value=0.0)
+        roll = s.rolling(12, min_periods=12).sum()
+        out = {}
+        for k in months:
+            r = roll.loc[k] if k in roll.index else None
+            if r is not None and pd.notna(r["headcount"]) and r["headcount"] > 0:
+                out[k] = (float(r["leavers"] * 12.0 / r["headcount"]),
+                          float((r["leavers"] - r["restructuring_leavers"]) * 12.0 / r["headcount"]))
+        return out
+
+    def workforce(self, org_filter, period: ti.Period, group: str | None = None, focus: str = "headcount",
+                  top_n: int | None = None, ascending: bool | None = None) -> Result:
+        """Workforce view from the employee records (Actual months only), vs the same months of the
+        prior year. group: None (total only) | role | grade | staff_type | month | l2_region..l6_bu."""
+        focus = focus if focus in WF_METRICS else "headcount"
+        last = ti.last_closed_month(self.as_of)
+        lo = ti.data_bounds()[0]
+        shown = period.truncate(last)
+        months = [k for k in shown.months() if lo <= k <= last]
+        if not months:
+            raise ValueError(f"No employee records for {period.label()}: they cover the closed months "
+                             f"{ti.month_label(lo)} - {ti.month_label(last)}.")
+        notes = []
+        if period.months()[-1] > last:
+            notes.append(f"Employee records cover closed months up to {ti.month_label(last)}.")
+        py_months = [ti.add_months(k, -12) for k in months]
+        has_py = py_months[0] >= lo
+        if not has_py:
+            notes.append(f"No prior-year comparison: employee records start in {ti.month_label(lo)}.")
+        by_month = group == "month"
+        gcol = None if (not group or by_month) else group
+        n = len(months)
+        cur = self.fetch_workforce(months, org_filter, gcol)
+        prev = self.fetch_workforce(py_months, org_filter, gcol) if has_py else pd.DataFrame()
+        if not prev.empty:
+            prev = prev.assign(month_key=[ti.add_months(int(k), 12) for k in prev["month_key"]])
+
+        hc_col, fte_col = ("Headcount", "FTE") if by_month else ("Avg headcount", "Avg FTE")
+        cols = {k: v[0] for k, v in WF_METRICS.items()}
+        cols.update({"headcount": hc_col, "fte": fte_col})
+        label = WF_GROUPS.get(group) if group in WF_GROUPS else (level_label(group) if group else "Scope")
+
+        def row_of(name, c, p, kind: str) -> dict:
+            def g(src, k):
+                return None if src is None or pd.isna(src.get(k)) else float(src.get(k))
+            r = {label: name, "_kind": kind, hc_col: g(c, "avg_headcount"), "Headcount PY": g(p, "avg_headcount"),
+                 fte_col: g(c, "avg_fte"), "Hires": g(c, "hires"), "Leavers": g(c, "leavers"),
+                 "of which restructuring": g(c, "restructuring_leavers"),
+                 "Attrition": g(c, "attrition"), "Attrition PY": g(p, "attrition"),
+                 "Utilization": g(c, "utilization"), "Utilization PY": g(p, "utilization"),
+                 "Overtime ratio": g(c, "overtime"),
+                 "_fte_py": g(p, "avg_fte"), "_hires_py": g(p, "hires"), "_leavers_py": g(p, "leavers"),
+                 "_restructuring_py": g(p, "restructuring_leavers"),
+                 "_voluntary_attrition_py": g(p, "voluntary_attrition"), "Voluntary attrition": g(c, "voluntary_attrition"),
+                 "_overtime_py": g(p, "overtime")}
+            for key, direction in (("Attrition", "down"), ("Utilization", "up")):
+                a, b = r[key], r[f"{key} PY"]
+                r[f"_fav_{key}"] = ti.is_favorable(a - b, direction) if a is not None and b is not None else None
+            return r
+
+        tot_c = self._wf_summary(cur, None, n).iloc[0]
+        tot_p = self._wf_summary(prev, None, n).iloc[0] if has_py and not prev.empty else None
+        total = row_of("Total", tot_c, tot_p, "subtotal")
+        rows, entities_total = [], 0
+        if by_month:
+            mc = self._wf_summary(cur, "month_key", 1).set_index("month_key")
+            mp = self._wf_summary(prev, "month_key", 1).set_index("month_key") if has_py and not prev.empty else None
+            r12, r12_py = self._wf_r12(months, org_filter), (self._wf_r12(py_months, org_filter) if has_py else {})
+            for k in months:
+                c = mc.loc[k] if k in mc.index else None
+                p = mp.loc[k] if mp is not None and k in mp.index else None
+                row = row_of(ti.month_label(k), c, p, "line")
+                a, b = r12.get(k, (None, None)), r12_py.get(ti.add_months(k, -12), (None, None))
+                row.update({"Attrition": a[0], "Voluntary attrition": a[1], "Attrition PY": b[0],
+                            "_voluntary_attrition_py": b[1],
+                            "_fav_Attrition": ti.is_favorable(a[0] - b[0], "down") if None not in (a[0], b[0]) else None})
+                rows.append(row)
+            total[label] = f"Total {shown.label()}"
+            rows.append(total)
+        else:
+            if gcol:
+                gc = self._wf_summary(cur, gcol, n).set_index(gcol)
+                gp = self._wf_summary(prev, gcol, n).set_index(gcol) if has_py and not prev.empty else None
+                body = [row_of(str(k), gc.loc[k], gp.loc[k] if gp is not None and k in gp.index else None, "line")
+                        for k in gc.index]
+                entities_total = len(body)
+                fcol = cols[focus]
+                if gcol == "grade":
+                    body.sort(key=lambda r: r[label])
+                elif gcol == "staff_type":
+                    body.sort(key=lambda r: (r[label] != "Direct", r[label]))
+                else:
+                    desc = not bool(ascending)
+                    body.sort(key=lambda r: (r.get(fcol) is None, -(r.get(fcol) or 0) if desc else (r.get(fcol) or 0)))
+                    if top_n and top_n > 0:
+                        body = body[:top_n]
+                rows = [total] + body
+            else:
+                rows = [total]
+        # monthly totals (peak month for hires / leavers)
+        monthly = cur.groupby("month_key")[["headcount", "hires", "leavers", "restructuring_leavers"]].sum() \
+            if not cur.empty else pd.DataFrame()
+        peak = None
+        if n > 1 and not monthly.empty and monthly["leavers"].max() > 0:
+            k = int(monthly["leavers"].idxmax())
+            peak = {"month": ti.month_label(k), "leavers": float(monthly.loc[k, "leavers"]),
+                    "restructuring": float(monthly.loc[k, "restructuring_leavers"])}
+        df = pd.DataFrame(rows)
+        series = [f"Actual ({shown.label()})"] + ([f"PY ({ti.month_label(py_months[0])} - "
+                                                     f"{ti.month_label(py_months[-1])})"] if has_py else [])
+        meta = {"group": group, "group_label": label, "focus": focus, "cols": cols, "has_py": has_py,
+                "n_months": n, "entities_total": entities_total, "ascending": bool(ascending),
+                "top_n": top_n, "peak_leavers": peak, "series": ["Actual"] + (["PY"] if has_py else []),
+                "monthly": {ti.month_label(int(k)): {c: float(v) for c, v in r.items()} for k, r in monthly.iterrows()}
+                if n > 1 else {}}
+        if group in ORG_LEVELS:
+            meta.update({"level": group, "level_label": label})
+        return Result("workforce", df, meta=meta, sql=self._take_sql(), notes=notes,
+                      filters=self._filters(org_filter, shown, extra={
+                          "versions": series, "source": "fictional employee records (closed months)"}))
 

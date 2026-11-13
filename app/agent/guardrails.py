@@ -22,8 +22,9 @@ from sqlglot import exp
 from app.config import backend, settings
 from app.db import run_with_timeout
 
-WHITELIST = {"v_org", "v_account", "v_period", "v_version", "v_pnl_leaf", "v_pnl", "v_stats"}
-RLS_VIEWS = {"v_pnl_leaf", "v_pnl", "v_stats"}
+WHITELIST = {"v_org", "v_account", "v_period", "v_version", "v_pnl_leaf", "v_pnl", "v_stats", "v_employee",
+             "v_employee_month"}
+RLS_VIEWS = {"v_pnl_leaf", "v_pnl", "v_stats", "v_employee", "v_employee_month"}
 FORBIDDEN_NODES = (exp.Insert, exp.Update, exp.Delete, exp.Drop, exp.Create, exp.Alter, exp.Merge,
                    exp.Command, exp.Into, exp.Grant, exp.TruncateTable, exp.Transaction, exp.Commit,
                    exp.Rollback, exp.Set, exp.Use, exp.Pragma, exp.Copy, exp.Describe)
@@ -144,8 +145,10 @@ def extract_numbers(text: str) -> list[NumberToken]:
     out = []
     for m in NUM_RX.finditer(text or ""):
         intpart, frac, unit = m.group(1), m.group(2) or "", (m.group(3) or "").lower()
-        # skip parts of codes like 7A1, FC2, Q3, R12M, H1 (preceded by a letter) - handled by lookbehind
-        nxt = text[m.end():m.end() + 1]
+        # skip parts of codes like 7A1 (a letter right after the digits); FC2, Q3, R12M, H1 (preceded by a
+        # letter) are handled by the lookbehind. "62 restructuring" is a number followed by a word: keep it.
+        num_end = m.end(2) if m.group(2) else m.end(1)
+        nxt = text[num_end:num_end + 1]
         if not unit and nxt.isalpha():
             continue
         v = float(intpart.replace(",", "") + frac)

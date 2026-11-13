@@ -1,12 +1,13 @@
 #!/usr/bin/env python
-"""Generate the synthetic RL Certification & Inspection management P&L (Americas), seeded.
+"""Generate the synthetic RL Certification & Inspection general-ledger (GL) P&L (Americas), seeded.
 
-Structure mirrors the customer's AD50 monthly management P&L:
-  01 Billing, 02 WIP & UI, 03 REVENUE, 04 Intragroup revenue, 05 Intragroup subcontracting,
-  06 PRODUCTION, 07 Personnel charges (7A direct / 7B non-production), 08 External subcontracting,
-  09 Other costs, 10 Functional neutralization, 11 GROSS PROFIT, 12 Total functional costs,
-  13 MAOP (management adjusted operating profit), 17 Other operating expenses, 18 MANAGEMENT OP,
-  19 Financial result, 20 Corporate taxes, 21 NET INCOME   (+ FTE / headcount / hours statistics)
+Generic monthly management P&L (line keys are internal; labels carry no codes):
+  Billing, WIP & deferred income, REVENUE, Intragroup revenue, Intragroup subcontracting,
+  PRODUCTION, Personnel costs (direct / indirect staff), External subcontracting, Other costs,
+  Functional cost recharges, GROSS PROFIT, Functional costs, OPERATING PROFIT, Other operating
+  expenses, EBIT, Financial result, Income taxes, NET INCOME  (+ FTE / headcount / hours statistics)
+plus fictional employee-level data (codes only, no names) whose monthly hours, FTE and headcount add
+up exactly to the BU statistics.
 
 Writes one Parquet file per table into data/, plus
   data/control_totals.parquet  intended subtotals per BU x month x version (scripts/reconcile.py)
@@ -19,7 +20,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -66,7 +67,7 @@ CITIES = {
     "Peru": [("Lima", "LIM"), ("Arequipa", "AQP")],
     "Ecuador": [("Quito", "UIO"), ("Guayaquil", "GYE")],
     "Argentina": [("Buenos Aires", "BUE"), ("Cordoba", "COR"), ("Neuquen", "NQN")],
-    "Chile": [("Santiago", "SCL"), ("Antofagasta", "ANF"), ("Concepcion", "CCP")],
+    "Chile": [("Calama", "CJC"), ("Antofagasta", "ANF"), ("Concepcion", "CCP")],
     "Brazil": [("Sao Paulo", "SAO"), ("Rio de Janeiro", "RIO"), ("Belo Horizonte", "BHZ"), ("Curitiba", "CWB")],
     "Paraguay": [("Asuncion", "ASU")],
     "Uruguay": [("Montevideo", "MVD")],
@@ -81,6 +82,7 @@ PRODUCT_LINES = {
     "Certification & Sustainability": {"code": "CER", "short": "Certification", "type": "certification", "growth": 0.08, "scale": 0.5},
     "Metals & Minerals":              {"code": "MMI", "short": "M&M", "type": "laboratory", "growth": 0.05, "scale": 1.0},
 }
+# Environmental Lab Testing exists only in Canada (main business) and as one small US unit.
 COUNTRY_PLS = {
     "United States": ["Buildings & Infrastructure", "Industry & Energy", "Power & Utilities",
                       "Elevators & Pressure Vessels", "Environmental Lab Testing", "Consumer Products",
@@ -89,21 +91,23 @@ COUNTRY_PLS = {
                "Metals & Minerals", "Certification & Sustainability"],
     "Mexico": ["Buildings & Infrastructure", "Industry & Energy", "Consumer Products", "Elevators & Pressure Vessels",
                "Metals & Minerals", "Certification & Sustainability"],
-    "Colombia": ["Buildings & Infrastructure", "Industry & Energy", "Certification & Sustainability",
-                 "Environmental Lab Testing"],
+    "Colombia": ["Buildings & Infrastructure", "Industry & Energy", "Certification & Sustainability"],
     "Peru": ["Metals & Minerals", "Buildings & Infrastructure", "Industry & Energy"],
     "Ecuador": ["Industry & Energy", "Buildings & Infrastructure"],
-    "Argentina": ["Industry & Energy", "Buildings & Infrastructure", "Elevators & Pressure Vessels",
-                  "Environmental Lab Testing"],
-    "Chile": ["Metals & Minerals", "Industry & Energy", "Environmental Lab Testing", "Buildings & Infrastructure"],
-    "Brazil": ["Buildings & Infrastructure", "Industry & Energy", "Environmental Lab Testing",
-               "Elevators & Pressure Vessels", "Metals & Minerals", "Certification & Sustainability",
-               "Power & Utilities"],
+    "Argentina": ["Industry & Energy", "Buildings & Infrastructure", "Elevators & Pressure Vessels"],
+    "Chile": ["Metals & Minerals", "Industry & Energy", "Buildings & Infrastructure"],
+    "Brazil": ["Buildings & Infrastructure", "Industry & Energy", "Elevators & Pressure Vessels", "Metals & Minerals",
+               "Certification & Sustainability", "Power & Utilities"],
     "Paraguay": ["Buildings & Infrastructure", "Certification & Sustainability"],
-    "Uruguay": ["Buildings & Infrastructure", "Environmental Lab Testing", "Certification & Sustainability"],
+    "Uruguay": ["Buildings & Infrastructure", "Certification & Sustainability"],
+}
+# Size overrides per (country, product line): number of cities, max units per city, scale factor
+PL_SIZE = {
+    ("United States", "Environmental Lab Testing"): {"cities": 1, "max_units": 1, "scale": 0.35},
+    ("Canada", "Environmental Lab Testing"): {"cities": 4, "max_units": 2, "scale": 1.25},
 }
 REGION_ORDER = ["US & Canada", "Mexico", "Northern South America", "Southern South America", "BPU"]
-STORY = {"a": ("United States", "Elevators & Pressure Vessels"), "b": ("Brazil", "Environmental Lab Testing"),
+STORY = {"a": ("United States", "Elevators & Pressure Vessels"), "b": ("Canada", "Environmental Lab Testing"),
          "c": ("Mexico", "Buildings & Infrastructure"), "d": ("Chile", "Metals & Minerals"),
          "e": ("Canada", "Power & Utilities")}
 
@@ -139,11 +143,11 @@ OT_SEASON = np.array([0.9, 0.95, 1.2, 1.0, 1.0, 1.05, 0.9, 0.8, 1.05, 1.2, 1.15,
 PERS_SEASON = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.01, 1.0, 0.99, 1.0, 1.0, 1.0, 1.02])
 PERS_SEASON = PERS_SEASON / PERS_SEASON.mean()
 WIP_PROFILE = np.array([0.035, 0.030, 0.020, 0.025, 0.020, 0.015, 0.020, 0.030, 0.010, -0.010, -0.020])
-# Unearned income (UI): annual fees billed in advance in January, released through the year
+# Deferred income: annual fees billed in advance in January, released through the year
 UI_PROFILE = np.array([-0.050, 0.006, 0.006, 0.005, 0.005, 0.005, 0.004, 0.004, 0.004, 0.004, 0.004, 0.003])
 
 # --------------------------------------------------------------------------------------
-# Chart of accounts (AD50). Lines 14-16 are not used in the management view (customer numbering).
+# Chart of accounts (general ledger). Line keys are internal (14-16 unused); labels carry no codes.
 # (account_id, line_no, l1_name, l2_code, l2_name, l3_code, l3_name, is_leaf, is_subtotal,
 #  natural_sign, display_order, favorable_direction)
 # --------------------------------------------------------------------------------------
@@ -151,28 +155,28 @@ ACCOUNTS = [
     (100, 1, "Billing", "1", "Billing", "1", "Billing", 0, 0, 1, 100, "up"),
     (101, 1, "Billing", "1", "Billing", "1.1", "External billing", 1, 0, 1, 101, "up"),
     (102, 1, "Billing", "1", "Billing", "1.2", "Credit notes", 1, 0, 1, 102, "up"),
-    (200, 2, "WIP & UI", "2", "WIP & UI", "2", "WIP & UI", 0, 0, 1, 200, "up"),
-    (201, 2, "WIP & UI", "2", "WIP & UI", "2.1", "WIP change", 1, 0, 1, 201, "up"),
-    (202, 2, "WIP & UI", "2", "WIP & UI", "2.2", "Unearned income change", 1, 0, 1, 202, "up"),
+    (200, 2, "WIP & deferred income", "2", "WIP & deferred income", "2", "WIP & deferred income", 0, 0, 1, 200, "up"),
+    (201, 2, "WIP & deferred income", "2", "WIP & deferred income", "2.1", "WIP change", 1, 0, 1, 201, "up"),
+    (202, 2, "WIP & deferred income", "2", "WIP & deferred income", "2.2", "Deferred income change", 1, 0, 1, 202, "up"),
     (300, 3, "Revenue", "3", "Revenue", "3", "Revenue", 0, 1, 1, 300, "up"),
     (400, 4, "Intragroup revenue", "4", "Intragroup revenue", "4", "Intragroup revenue", 0, 0, 1, 400, "up"),
     (401, 4, "Intragroup revenue", "4", "Intragroup revenue", "4.1", "Intragroup revenue", 1, 0, 1, 401, "up"),
     (500, 5, "Intragroup subcontracting", "5", "Intragroup subcontracting", "5", "Intragroup subcontracting", 0, 0, -1, 500, "down"),
     (501, 5, "Intragroup subcontracting", "5", "Intragroup subcontracting", "5.1", "Intragroup subcontracting", 1, 0, -1, 501, "down"),
     (600, 6, "Production", "6", "Production", "6", "Production", 0, 1, 1, 600, "up"),
-    (700, 7, "Personnel charges", "7", "Personnel charges", "7", "Personnel charges", 0, 0, -1, 700, "down"),
-    (710, 7, "Personnel charges", "7A", "Direct (production) employees", "7A", "Direct (production) employees", 0, 0, -1, 710, "down"),
-    (711, 7, "Personnel charges", "7A", "Direct (production) employees", "7A1", "Guaranteed salary", 1, 0, -1, 711, "down"),
-    (712, 7, "Personnel charges", "7A", "Direct (production) employees", "7A2", "Bonus", 1, 0, -1, 712, "down"),
-    (713, 7, "Personnel charges", "7A", "Direct (production) employees", "7A3", "Variable / overtime", 1, 0, -1, 713, "down"),
-    (714, 7, "Personnel charges", "7A", "Direct (production) employees", "7A4", "Social security", 1, 0, -1, 714, "down"),
-    (715, 7, "Personnel charges", "7A", "Direct (production) employees", "7A5", "Pension", 1, 0, -1, 715, "down"),
-    (716, 7, "Personnel charges", "7A", "Direct (production) employees", "7A6", "Other personnel", 1, 0, -1, 716, "down"),
-    (720, 7, "Personnel charges", "7B", "Non-production employees", "7B", "Non-production employees", 0, 0, -1, 720, "down"),
-    (721, 7, "Personnel charges", "7B", "Non-production employees", "7B1", "Salary", 1, 0, -1, 721, "down"),
-    (722, 7, "Personnel charges", "7B", "Non-production employees", "7B2", "Bonus", 1, 0, -1, 722, "down"),
-    (723, 7, "Personnel charges", "7B", "Non-production employees", "7B3", "Social security", 1, 0, -1, 723, "down"),
-    (724, 7, "Personnel charges", "7B", "Non-production employees", "7B4", "Other", 1, 0, -1, 724, "down"),
+    (700, 7, "Personnel costs", "7", "Personnel costs", "7", "Personnel costs", 0, 0, -1, 700, "down"),
+    (710, 7, "Personnel costs", "7A", "Direct staff costs", "7A", "Direct staff costs", 0, 0, -1, 710, "down"),
+    (711, 7, "Personnel costs", "7A", "Direct staff costs", "7A1", "Direct staff salaries", 1, 0, -1, 711, "down"),
+    (712, 7, "Personnel costs", "7A", "Direct staff costs", "7A2", "Direct staff bonus", 1, 0, -1, 712, "down"),
+    (713, 7, "Personnel costs", "7A", "Direct staff costs", "7A3", "Direct staff overtime", 1, 0, -1, 713, "down"),
+    (714, 7, "Personnel costs", "7A", "Direct staff costs", "7A4", "Direct staff social security", 1, 0, -1, 714, "down"),
+    (715, 7, "Personnel costs", "7A", "Direct staff costs", "7A5", "Direct staff pension", 1, 0, -1, 715, "down"),
+    (716, 7, "Personnel costs", "7A", "Direct staff costs", "7A6", "Direct staff other costs", 1, 0, -1, 716, "down"),
+    (720, 7, "Personnel costs", "7B", "Indirect staff costs", "7B", "Indirect staff costs", 0, 0, -1, 720, "down"),
+    (721, 7, "Personnel costs", "7B", "Indirect staff costs", "7B1", "Indirect staff salaries", 1, 0, -1, 721, "down"),
+    (722, 7, "Personnel costs", "7B", "Indirect staff costs", "7B2", "Indirect staff bonus", 1, 0, -1, 722, "down"),
+    (723, 7, "Personnel costs", "7B", "Indirect staff costs", "7B3", "Indirect staff social security", 1, 0, -1, 723, "down"),
+    (724, 7, "Personnel costs", "7B", "Indirect staff costs", "7B4", "Indirect staff other costs", 1, 0, -1, 724, "down"),
     (800, 8, "External subcontracting", "8", "External subcontracting", "8", "External subcontracting", 0, 0, -1, 800, "down"),
     (801, 8, "External subcontracting", "8", "External subcontracting", "8.1", "External subcontractors", 1, 0, -1, 801, "down"),
     (802, 8, "External subcontracting", "8", "External subcontracting", "8.2", "Temporary staff", 1, 0, -1, 802, "down"),
@@ -185,25 +189,25 @@ ACCOUNTS = [
     (906, 9, "Other costs", "9", "Other costs", "9.6", "IT & telecom", 1, 0, -1, 906, "down"),
     (907, 9, "Other costs", "9", "Other costs", "9.7", "Lab consumables", 1, 0, -1, 907, "down"),
     (908, 9, "Other costs", "9", "Other costs", "9.8", "Insurance", 1, 0, -1, 908, "down"),
-    (909, 9, "Other costs", "9", "Other costs", "9.9", "Other", 1, 0, -1, 909, "down"),
-    (1000, 10, "Functional neutralization", "10", "Functional neutralization", "10", "Functional neutralization", 0, 0, 1, 1000, "up"),
-    (1001, 10, "Functional neutralization", "10", "Functional neutralization", "10.1", "Functional neutralization", 1, 0, 1, 1001, "up"),
+    (909, 9, "Other costs", "9", "Other costs", "9.9", "Miscellaneous costs", 1, 0, -1, 909, "down"),
+    (1000, 10, "Functional cost recharges", "10", "Functional cost recharges", "10", "Functional cost recharges", 0, 0, 1, 1000, "up"),
+    (1001, 10, "Functional cost recharges", "10", "Functional cost recharges", "10.1", "Functional cost recharges", 1, 0, 1, 1001, "up"),
     (1100, 11, "Gross profit", "11", "Gross profit", "11", "Gross profit", 0, 1, 1, 1100, "up"),
-    (1200, 12, "Total functional costs", "12", "Total functional costs", "12", "Total functional costs", 0, 0, -1, 1200, "down"),
-    (1201, 12, "Total functional costs", "12", "Total functional costs", "12.1", "Country functions", 1, 0, -1, 1201, "down"),
-    (1202, 12, "Total functional costs", "12", "Total functional costs", "12.2", "Region functions", 1, 0, -1, 1202, "down"),
-    (1203, 12, "Total functional costs", "12", "Total functional costs", "12.3", "HQ allocation", 1, 0, -1, 1203, "down"),
-    (1300, 13, "MAOP", "13", "MAOP", "13", "MAOP", 0, 1, 1, 1300, "up"),
+    (1200, 12, "Functional costs", "12", "Functional costs", "12", "Functional costs", 0, 0, -1, 1200, "down"),
+    (1201, 12, "Functional costs", "12", "Functional costs", "12.1", "Country functions", 1, 0, -1, 1201, "down"),
+    (1202, 12, "Functional costs", "12", "Functional costs", "12.2", "Region functions", 1, 0, -1, 1202, "down"),
+    (1203, 12, "Functional costs", "12", "Functional costs", "12.3", "HQ allocation", 1, 0, -1, 1203, "down"),
+    (1300, 13, "Operating profit", "13", "Operating profit", "13", "Operating profit", 0, 1, 1, 1300, "up"),
     (1700, 17, "Other operating expenses", "17", "Other operating expenses", "17", "Other operating expenses", 0, 0, -1, 1700, "down"),
     (1701, 17, "Other operating expenses", "17", "Other operating expenses", "17.1", "Restructuring", 1, 0, -1, 1701, "down"),
     (1702, 17, "Other operating expenses", "17", "Other operating expenses", "17.2", "Amortisation of acquired intangibles", 1, 0, -1, 1702, "down"),
     (1703, 17, "Other operating expenses", "17", "Other operating expenses", "17.3", "Other non-recurring", 1, 0, -1, 1703, "down"),
-    (1800, 18, "Management OP", "18", "Management OP", "18", "Management OP", 0, 1, 1, 1800, "up"),
+    (1800, 18, "EBIT", "18", "EBIT", "18", "EBIT", 0, 1, 1, 1800, "up"),
     (1900, 19, "Financial result", "19", "Financial result", "19", "Financial result", 0, 0, 1, 1900, "up"),
     (1901, 19, "Financial result", "19", "Financial result", "19.1", "Net interest", 1, 0, 1, 1901, "up"),
     (1902, 19, "Financial result", "19", "Financial result", "19.2", "FX result", 1, 0, 1, 1902, "up"),
-    (2000, 20, "Corporate taxes", "20", "Corporate taxes", "20", "Corporate taxes", 0, 0, -1, 2000, "down"),
-    (2001, 20, "Corporate taxes", "20", "Corporate taxes", "20.1", "Corporate taxes", 1, 0, -1, 2001, "down"),
+    (2000, 20, "Income taxes", "20", "Income taxes", "20", "Income taxes", 0, 0, -1, 2000, "down"),
+    (2001, 20, "Income taxes", "20", "Income taxes", "20.1", "Income taxes", 1, 0, -1, 2001, "down"),
     (2100, 21, "Net income", "21", "Net income", "21", "Net income", 0, 1, 1, 2100, "up"),
 ]
 LEAVES = [a for a in ACCOUNTS if a[7] == 1]
@@ -291,9 +295,12 @@ def build_org(seed: int) -> list[BU]:
         plan = []
         for country in sorted(COUNTRIES, key=lambda c: (REGION_ORDER.index(COUNTRIES[c][1]), c)):
             for pl in COUNTRY_PLS[country]:
+                size = PL_SIZE.get((country, pl), {})
                 n_bus = min(int(rng.choice([1, 2, 3], p=[0.55, 0.30, 0.15])), len(CITIES[country]))
+                n_bus = min(size.get("cities", n_bus), len(CITIES[country]))
                 for ci in sorted(rng.choice(len(CITIES[country]), size=n_bus, replace=False)):
                     n_units = int(rng.choice([1, 2, 3, 4], p=[0.55, 0.28, 0.11, 0.06]))
+                    n_units = min(n_units, size.get("max_units", n_units))
                     plan.append((country, pl, CITIES[country][ci], n_units))
         if abs(sum(p[-1] for p in plan) - target) <= 4:
             break
@@ -302,6 +309,7 @@ def build_org(seed: int) -> list[BU]:
     for country, pl, (city, ccode), n_units in plan:
         code, region, cscale = COUNTRIES[country][0], COUNTRIES[country][1], COUNTRIES[country][2]
         meta = PRODUCT_LINES[pl]
+        size_scale = PL_SIZE.get((country, pl), {}).get("scale", 1.0)
         for k in range(1, n_units + 1):
             story = (country, pl) in STORY.values()
             spread = 0.4 if story else 1.0
@@ -309,7 +317,7 @@ def build_org(seed: int) -> list[BU]:
             bus.append(BU(
                 bu_id=len(bus) + 1, bu_name=f"{code}-{meta['code']}-{ccode}-{k:02d}",
                 business=f"{meta['short']} {city}", pl=pl, country=country, region=region, city=city,
-                base=8.0e6 * cscale * meta["scale"] * float(rng.lognormal(0, 0.45)),
+                base=8.0e6 * cscale * meta["scale"] * size_scale * float(rng.lognormal(0, 0.45)),
                 growth=meta["growth"] + float(rng.normal(0, 0.012)),
                 noise=float(rng.uniform(0.025, 0.045)),
                 pers_off=float(rng.normal(0, 0.018)) * spread,
@@ -317,7 +325,7 @@ def build_org(seed: int) -> list[BU]:
                 other_off=float(rng.normal(0, 0.010)) * spread,
                 r_igr=float(rng.uniform(0.02, 0.06)), r_igs=float(rng.uniform(0.02, 0.06)),
                 cn_ratio=float(rng.uniform(0.008, 0.02)),
-                util=float(rng.uniform(0.78, 0.86)), ot=float(rng.uniform(0.07, 0.12)),
+                util=float(rng.uniform(0.70, 0.78)), ot=float(rng.uniform(0.04, 0.08)),
                 hc_ratio=float(rng.uniform(1.04, 1.09)),
                 amort=float(rng.uniform(0.005, 0.015)) if rng.random() < 0.35 else 0.0,
             ))
@@ -343,7 +351,7 @@ def simulate_bu(rng: np.random.Generator, bu: BU):
     other_adj = np.zeros(n)
     restructuring_extra = np.zeros(n)
 
-    # Story (b): Brazil Environmental Lab Testing loses a large contract from Feb 2026:
+    # Story (b): Canada Environmental Lab Testing loses a large contract from Feb 2026:
     # production -20% immediately, personnel adjusts only from May 2026 (3-month lag), with a
     # one-off restructuring (severance) charge in May 2026.
     if (bu.country, bu.pl) == STORY["b"]:
@@ -360,7 +368,7 @@ def simulate_bu(rng: np.random.Generator, bu: BU):
     prod_ratio = prod / (trend * season[m])
     leaves: dict[str, np.ndarray] = {}
 
-    # Revenue side: production -> intragroup -> revenue -> WIP & UI -> billing ------------
+    # Revenue side: production -> intragroup -> revenue -> WIP & deferred income -> billing ------------
     igr = prod * bu.r_igr * (1 + rng.normal(0, 0.03, n))
     igs = -prod * bu.r_igs * (1 + rng.normal(0, 0.03, n))
     rev = prod - igr - igs
@@ -445,6 +453,152 @@ def add_taxes(leaves: dict[str, np.ndarray], tax_rates: np.ndarray) -> None:
     """Corporate taxes (20.1) = -rate x pre-tax result (lines 1..19), per BU-month."""
     pre_tax = sum(leaves[c] for c in LEAF_CODES if c != "20.1")
     leaves["20.1"] = -pre_tax * tax_rates[:, None]
+
+
+# --------------------------------------------------------------------------------------
+# Fictional employees (codes only: no names, gender, age or other personal attributes)
+# --------------------------------------------------------------------------------------
+ROLES = {
+    "inspection": {"Direct": [("Inspector", 0.55), ("Senior inspector", 0.30), ("Lead inspector", 0.15)],
+                   "Indirect": [("Scheduler", 0.30), ("Sales", 0.25), ("Administration", 0.30), ("Manager", 0.15)]},
+    "infrastructure": {"Direct": [("Field engineer", 0.40), ("Inspector", 0.35), ("Project manager", 0.25)],
+                       "Indirect": [("Sales", 0.30), ("Administration", 0.40), ("Manager", 0.30)]},
+    "industry": {"Direct": [("Inspector", 0.45), ("Engineer", 0.35), ("NDT technician", 0.20)],
+                 "Indirect": [("Sales", 0.30), ("Administration", 0.40), ("Manager", 0.30)]},
+    "laboratory": {"Direct": [("Lab technician", 0.50), ("Lab analyst", 0.35), ("Chemist", 0.15)],
+                   "Indirect": [("Sample reception", 0.30), ("Quality", 0.20), ("Administration", 0.30),
+                                ("Manager", 0.20)]},
+    "certification": {"Direct": [("Auditor", 0.55), ("Lead auditor", 0.30), ("Technical reviewer", 0.15)],
+                      "Indirect": [("Sales", 0.35), ("Administration", 0.40), ("Manager", 0.25)]},
+}
+GRADES = ["G1", "G2", "G3", "G4", "G5"]
+GRADE_P = np.array([0.22, 0.30, 0.25, 0.15, 0.08])
+SENIOR_ROLES = {"Manager", "Lead inspector", "Lead auditor", "Project manager"}
+GRADE_UTIL = {"G1": 0.97, "G2": 1.03, "G3": 1.04, "G4": 0.97, "G5": 0.82}
+ROLE_UTIL = {"Project manager": 0.85, "Lead inspector": 0.92, "Lead auditor": 0.92, "Technical reviewer": 0.95}
+GRADE_ATTRITION = {"G1": 1.4, "G2": 1.15, "G3": 0.9, "G4": 0.75, "G5": 0.6}
+GRADE_OT = {"G1": 1.2, "G2": 1.2, "G3": 1.0, "G4": 0.8, "G5": 0.5}
+
+
+def build_employees(bus: list[BU], stats_out: dict[str, np.ndarray], n_act: int, seed: int):
+    """Simulate a roster per BU for the first n_act output months (closed Actual months).
+
+    Monthly headcount follows the simulated BU headcount; leavers are voluntary (monthly hazard by
+    region and grade) or restructuring (when the BU headcount falls). Direct staff carry available,
+    billable and overtime hours; the BU sums reproduce the simulated utilization and overtime ratio.
+    Returns (dim_employee, fact_employee_month, stats) where stats holds the Actual BU statistics
+    recomputed from the employees for those months.
+    """
+    rng = np.random.default_rng(seed + 7)
+    emp: dict[str, list] = {k: [] for k in ("bu_id", "role", "grade", "staff_type", "fte_pct", "hire_m",
+                                             "leave_m", "reason", "util_w", "ot_w", "tenure_days")}
+    rows = {k: [] for k in ("employee_id", "month_idx", "bu_id", "fte", "available_hours", "billable_hours",
+                            "overtime_hours")}
+    new_stats = {k: stats_out[k][:, :n_act].copy() for k in STAT_KEYS}
+
+    def hire(b: int, bu: BU, staff: str, month: int, tenure: float = 0.0) -> int:
+        names, probs = zip(*ROLES[bu.btype][staff])
+        role = str(rng.choice(names, p=np.array(probs) / sum(probs)))
+        g = int(rng.choice(5, p=GRADE_P))
+        if role in SENIOR_ROLES:
+            g = max(g, 2 + int(rng.integers(0, 3)))
+        grade = GRADES[min(g, 4)]
+        p_pt = float(np.clip((1 - 1 / bu.hc_ratio) / 0.29, 0.0, 0.6))
+        fte_pct = 1.0 if rng.random() > p_pt else (0.8 if rng.random() < 0.7 else 0.5)
+        emp["bu_id"].append(bu.bu_id)
+        emp["role"].append(role)
+        emp["grade"].append(grade)
+        emp["staff_type"].append(staff)
+        emp["fte_pct"].append(fte_pct)
+        emp["hire_m"].append(month)
+        emp["leave_m"].append(None)
+        emp["reason"].append(None)
+        emp["util_w"].append(GRADE_UTIL[grade] * ROLE_UTIL.get(role, 1.0) * float(rng.lognormal(0, 0.07)))
+        emp["ot_w"].append(GRADE_OT[grade] * float(rng.lognormal(0, 0.6)))
+        emp["tenure_days"].append(tenure)
+        return len(emp["bu_id"]) - 1
+
+    for b, bu in enumerate(bus):
+        north = COUNTRIES[bu.country][7] == "N"
+        base_hazard = (0.11 if north else 0.14) / 12.0
+        roster: list[int] = []
+        for t in range(n_act):
+            m = t % 12
+            target = int(round(stats_out["headcount"][b, t]))
+            share = float(stats_out["direct_fte"][b, t] / max(stats_out["fte"][b, t], 1e-9))
+            target_direct = min(target, max(1, int(round(target * share)))) if target > 0 else 0
+            if t == 0:
+                for _ in range(target_direct):
+                    roster.append(hire(b, bu, "Direct", -1, float(min(rng.exponential(6 * 365), 30 * 365))))
+                for _ in range(target - target_direct):
+                    roster.append(hire(b, bu, "Indirect", -1, float(min(rng.exponential(6 * 365), 30 * 365))))
+            else:
+                roster = [e for e in roster if emp["leave_m"][e] is None]
+                for staff, tgt in (("Direct", target_direct), ("Indirect", target - target_direct)):
+                    cur = [e for e in roster if emp["staff_type"][e] == staff]
+                    if len(cur) > tgt:                      # headcount fell: restructuring at end of t-1
+                        for e in rng.choice(cur, size=len(cur) - tgt, replace=False):
+                            emp["leave_m"][int(e)], emp["reason"][int(e)] = t - 1, "Restructuring"
+                    elif len(cur) < tgt:
+                        roster += [hire(b, bu, staff, t) for _ in range(tgt - len(cur))]
+                roster = [e for e in roster if emp["leave_m"][e] is None]
+            # voluntary leavers: work month t, gone from t+1
+            for e in roster:
+                if rng.random() < base_hazard * GRADE_ATTRITION[emp["grade"][e]]:
+                    emp["leave_m"][e], emp["reason"][e] = t, "Voluntary"
+            ids = np.array(roster)
+            fte = np.array([emp["fte_pct"][e] for e in roster])
+            direct = np.array([emp["staff_type"][e] == "Direct" for e in roster])
+            avail = np.where(direct, fte * AVAIL_HOURS * AVAIL_SEASON[bu.hemi][m]
+                             * (1 + rng.normal(0, 0.03, len(roster))), 0.0)
+            util = stats_out["billable_hours"][b, t] / stats_out["available_hours"][b, t]
+            ot = stats_out["overtime_hours"][b, t] / stats_out["available_hours"][b, t]
+            uw = np.array([emp["util_w"][e] for e in roster])
+            ow = np.array([emp["ot_w"][e] for e in roster])
+            bill = avail * util * uw / max((avail * uw).sum() / max(avail.sum(), 1e-9), 1e-9)
+            bill = np.minimum(bill, avail * 0.98)
+            bill *= util * avail.sum() / max(bill.sum(), 1e-9)       # BU utilization reproduced exactly
+            over = avail * ot * ow / max((avail * ow).sum() / max(avail.sum(), 1e-9), 1e-9)
+            rows["employee_id"].append(ids)
+            rows["month_idx"].append(np.full(len(roster), t))
+            rows["bu_id"].append(np.full(len(roster), bu.bu_id))
+            rows["fte"].append(fte)
+            rows["available_hours"].append(np.round(avail, 1))
+            rows["billable_hours"].append(np.round(bill, 1))
+            rows["overtime_hours"].append(np.round(over, 1))
+            new_stats["headcount"][b, t] = len(roster)
+            new_stats["fte"][b, t] = fte.sum()
+            new_stats["direct_fte"][b, t] = fte[direct].sum()
+            new_stats["available_hours"][b, t] = np.round(avail, 1).sum()
+            new_stats["billable_hours"][b, t] = np.round(bill, 1).sum()
+            new_stats["overtime_hours"][b, t] = np.round(over, 1).sum()
+
+    fact = pd.DataFrame({k: np.concatenate(v) for k, v in rows.items()})
+    leave_m = np.array([-10**6 if x is None else x for x in emp["leave_m"]])
+    hire_m = np.array(emp["hire_m"])
+    fact["is_hire"] = hire_m[fact["employee_id"].to_numpy()] == fact["month_idx"].to_numpy()
+    fact["is_leaver"] = leave_m[fact["employee_id"].to_numpy()] == fact["month_idx"].to_numpy()
+
+    def month_date(idx: int, day: int) -> date:
+        y, mo = FIRST_YEAR + idx // 12, idx % 12 + 1
+        return date(y, mo, min(day, 28)) if day < 29 else (date(y + (mo == 12), mo % 12 + 1, 1) - timedelta(days=1))
+
+    start = date(FIRST_YEAR, 1, 1)
+    dim = pd.DataFrame({
+        "employee_id": np.arange(1, len(emp["bu_id"]) + 1),
+        "employee_code": [f"E{100000 + i:06d}" for i in range(1, len(emp["bu_id"]) + 1)],
+        "bu_id": emp["bu_id"], "role": emp["role"], "grade": emp["grade"], "staff_type": emp["staff_type"],
+        "fte_pct": emp["fte_pct"],
+        "hire_date": [start - timedelta(days=int(tn) + 1) if hm < 0 else month_date(hm, int(1 + (i * 7) % 27))
+                      for i, (hm, tn) in enumerate(zip(emp["hire_m"], emp["tenure_days"]))],
+        "leave_date": [None if lm is None else month_date(lm, 31) for lm in emp["leave_m"]],
+        "leave_reason": emp["reason"],
+    })
+    fact["employee_id"] = fact["employee_id"] + 1
+    fact["month_key"] = [(FIRST_YEAR + i // 12) * 100 + i % 12 + 1 for i in fact["month_idx"]]
+    fact = fact.drop(columns=["month_idx"])[["month_key", "employee_id", "bu_id", "fte", "available_hours",
+                                              "billable_hours", "overtime_hours", "is_hire", "is_leaver"]]
+    return dim, fact, new_stats
 
 
 # --------------------------------------------------------------------------------------
@@ -561,6 +715,11 @@ def main() -> None:
     sim_out = slice(t_index(FIRST_YEAR, 1), t_index(FIRST_YEAR, 1) + N_OUT)
     truth_out = {c: truth[c][:, sim_out] for c in LEAF_CODES}
     stats_out = {k: stats[k][:, sim_out] for k in STAT_KEYS}
+    ly0, lm0 = last_closed_month(AS_OF)
+    n_act = (ly0 - FIRST_YEAR) * 12 + lm0
+    dim_employee, fact_employee_month, emp_stats = build_employees(bus, stats_out, n_act, seed)
+    for k in STAT_KEYS:                                # Actual BU statistics = employee totals
+        stats_out[k][:, :n_act] = emp_stats[k]
     forecasts, fc_stats = {}, {}
     for _vid, vname, k_act, is_fc in VERSIONS:
         if not is_fc:
@@ -668,7 +827,8 @@ def main() -> None:
 
     tables = {"dim_org": dim_org, "dim_account": dim_account, "dim_version": dim_version,
               "dim_period": dim_period, "fact_pnl": fact_pnl, "fact_stats": fact_stats,
-              "app_user": app_user, "user_org_access": user_org_access}
+              "app_user": app_user, "user_org_access": user_org_access,
+              "dim_employee": dim_employee, "fact_employee_month": fact_employee_month}
     for name, df in tables.items():
         df.to_parquet(DATA / f"{name}.parquet", index=False)
     control.to_parquet(DATA / "control_totals.parquet", index=False)
@@ -788,6 +948,35 @@ def compute_stories(t: dict[str, pd.DataFrame]) -> dict:
         "avg_fte": r(gs.groupby("month_key").fte.sum().mean()),
         "avg_headcount": r(gs.groupby("month_key").headcount.sum().mean()),
         "utilization_pct": r(100 * gs.billable_hours.sum() / gs.available_hours.sum())})
+
+    # Workforce (employee tables)
+    fe = t["fact_employee_month"].merge(t["dim_employee"][["employee_id", "role", "grade", "staff_type",
+                                                           "leave_reason"]], on="employee_id")
+    fe = fe.merge(t["dim_org"][["bu_id", "l3_country", "l4_product_line"]], on="bu_id")
+
+    def wf(df):
+        hc = df.groupby("month_key").size()
+        months = max(len(hc), 1)
+        leavers = int(df.is_leaver.sum())
+        return {"avg_headcount": r(hc.mean()), "leavers": leavers, "hires": int(df.is_hire.sum()),
+                "voluntary_leavers": int((df.is_leaver & (df.leave_reason == "Voluntary")).sum()),
+                "restructuring_leavers": int((df.is_leaver & (df.leave_reason == "Restructuring")).sum()),
+                "attrition_annualised_pct": r(100 * leavers / max(hc.mean(), 1e-9) * 12 / months),
+                "utilization_pct": r(100 * df.billable_hours.sum() / max(df.available_hours.sum(), 1e-9))}
+
+    in_range = lambda df, a, b: df[(df.month_key >= a) & (df.month_key <= b)]  # noqa: E731
+    out["workforce_group_fy2025"] = wf(in_range(fe, 202501, 202512))
+    country, pl = STORY["b"]
+    sb = fe[(fe.l3_country == country) & (fe.l4_product_line == pl)]
+    out["workforce_b"] = {"ytd_oct_2026": wf(in_range(sb, 202601, 202610)),
+                          "ytd_oct_2025": wf(in_range(sb, 202501, 202510)),
+                          "restructuring_leavers_by_month_2026": {
+                              int(k): int(v) for k, v in in_range(sb, 202601, 202610)[
+                                  lambda d: d.is_leaver & (d.leave_reason == "Restructuring")]
+                              .groupby("month_key").size().items()},
+                          "utilization_by_role_ytd_oct_2026_pct": {
+                              role: r(100 * g.billable_hours.sum() / g.available_hours.sum())
+                              for role, g in in_range(sb[sb.staff_type == "Direct"], 202601, 202610).groupby("role")}}
     return out
 
 

@@ -60,29 +60,42 @@ def test_readonly_execution_respects_limit_and_rls():
     assert len(big) == 1000
 
 
+def test_employee_views_are_readable_and_scoped():
+    with pytest.raises(SqlGuardError):
+        validate_sql("SELECT * FROM dim_employee", dialect="tsql")         # base table: not whitelisted
+    eng = get_engine("us_country_head")
+    allowed = None
+    if backend() == "duckdb":
+        from app.semantic.access import allowed_bus
+        allowed = allowed_bus("us_country_head")
+    df = execute_readonly(eng, validate_sql("SELECT DISTINCT l3_country FROM v_employee_month WHERE month_key = 202610",
+                                            allowed_bu_ids=allowed))
+    assert df.iloc[:, 0].tolist() == ["United States"]
+
+
 def _out(facts, data=None):
     return ToolOutput(tool="t", kind="pnl", facts=facts, data=data or [])
 
 
 def test_numeric_guard_accepts_supported_numbers():
-    outs = [_out(["MAOP: USD 23.1M; PY USD 21.6M, difference +USD 1.5M (+6.7%, favourable)",
-                  "MAOP margin (on revenue): 11.2%; PY 11.0% (+0.2 pp, favourable)"])]
-    answer = ("MAOP for YTD Oct 2026 (Actual) reached USD 23.1M, up USD 1.5M (+6.7%) on PY (USD 21.6M). "
+    outs = [_out(["Operating profit: USD 23.1M; PY USD 21.6M, difference +USD 1.5M (+6.7%, favourable)",
+                  "Operating margin (on revenue): 11.2%; PY 11.0% (+0.2 pp, favourable)"])]
+    answer = ("Operating profit for YTD Oct 2026 (Actual) reached USD 23.1M, up USD 1.5M (+6.7%) on PY (USD 21.6M). "
               "The margin improved to 11.2%, +0.2 pp vs last year, in 2026 for the 3 regions.")
-    g = check_numbers(answer, outs, "How is MAOP YTD vs last year?")
+    g = check_numbers(answer, outs, "How is operating profit YTD vs last year?")
     assert g.ok, g.unsupported
 
 
 def test_numeric_guard_flags_invented_numbers():
-    outs = [_out(["MAOP: USD 23.1M; PY USD 21.6M"])]
-    g = check_numbers("MAOP was USD 25.4M, 17.5% above plan.", outs)
+    outs = [_out(["Operating profit: USD 23.1M; PY USD 21.6M"])]
+    g = check_numbers("Operating profit was USD 25.4M, 17.5% above plan.", outs)
     assert not g.ok and "USD 25.4M".split()[1] in " ".join(g.unsupported) or "25.4M" in " ".join(g.unsupported)
     assert any("17.5" in u for u in g.unsupported)
 
 
 def test_numeric_guard_uses_table_values():
-    outs = [_out([], data=[{"Line": "MAOP", "Actual": 1457687.0}])]
-    assert check_numbers("MAOP came in at USD 1,457,687 and USD 1.5M rounded.", outs).ok
+    outs = [_out([], data=[{"Line": "Operating profit", "Actual": 1457687.0}])]
+    assert check_numbers("Operating profit came in at USD 1,457,687 and USD 1.5M rounded.", outs).ok
 
 
 def test_number_extraction_units():
@@ -96,8 +109,8 @@ def test_number_extraction_units():
 
 def test_redaction_drops_only_sentences_with_unsupported_numbers():
     from app.agent.graph import redact_sentences
-    text = "MAOP is USD 54.4M, USD 3.5M above PY. The gap vs budget is USD 9.9M. Costs rose faster than revenue."
-    assert redact_sentences(text, ["9.9M"]) == "MAOP is USD 54.4M, USD 3.5M above PY. Costs rose faster than revenue."
+    text = "Operating profit is USD 54.4M, USD 3.5M above PY. The gap vs budget is USD 9.9M. Costs rose faster than revenue."
+    assert redact_sentences(text, ["9.9M"]) == "Operating profit is USD 54.4M, USD 3.5M above PY. Costs rose faster than revenue."
     assert redact_sentences(text, ["<empty>"]) == ""
     # The headline sentence itself is unsupported: use the template instead of a dangling remainder.
     assert redact_sentences(text, ["54.4M"]) == ""

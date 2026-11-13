@@ -10,7 +10,7 @@ fi
 
 GH_USER="${GH_USER:-ankdeshm}"
 REPO="${REPO:-rl-finbot}"
-DESC="RL Finance Copilot: conversational finance analytics over an AD50 management P&L (SQL Server 2022, semantic layer, LangGraph agent, Streamlit) for a fictional TIC company - synthetic data"
+DESC="RL Finance Copilot: conversational finance and workforce analytics over a general-ledger management P&L (SQL Server 2022, semantic layer, LangGraph agent, Streamlit) for a fictional TIC company - synthetic data"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "=== Creating private GitHub repo ${GH_USER}/${REPO} ==="

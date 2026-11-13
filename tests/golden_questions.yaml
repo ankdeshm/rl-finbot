@@ -13,9 +13,9 @@
 #   rls: true  - counted in the row-level-security pass rate
 
 # ------------------------------------------------------------------------------- P&L
-- id: pnl_us_maop
+- id: pnl_us_op
   category: pnl
-  q: How is MAOP YTD vs last year and budget for the United States?
+  q: How is operating profit YTD vs last year and budget for the United States?
   tools: [get_pnl]
   expect:
     - {m: maop, org: {l3_country: United States}, p: YTD-2026-10}
@@ -63,15 +63,15 @@
     - {m: production, p: YTD-2026-10}
 - id: pnl_consumer_2025
   category: pnl
-  q: Revenue and MAOP for Consumer Products in 2025
+  q: Revenue and operating profit for Consumer Products in 2025
   tools: [get_pnl]
   text_mode: any
   expect:
     - {m: maop, org: {l4_product_line: Consumer Products}, p: FY-2025}
     - {m: revenue, org: {l4_product_line: Consumer Products}, p: FY-2025, text: true}
-- id: pnl_ssa_management_op
+- id: pnl_ssa_ebit
   category: pnl
-  q: Management OP of Southern South America year to date
+  q: EBIT of Southern South America year to date
   tools: [get_pnl, get_trend]
   expect:
     - {m: management_op, org: {l2_region: Southern South America}, p: YTD-2026-10}
@@ -99,15 +99,15 @@
   tools: [get_trend]
   expect:
     - {m: wip, org: {l3_country: Mexico, l4_product_line: Buildings & Infrastructure}, p: YTD-2026-10}
-- id: trend_ar_maop_2026
+- id: trend_ar_op_2026
   category: trend
-  q: Monthly MAOP trend for Argentina in 2026
+  q: Monthly operating profit trend for Argentina in 2026
   tools: [get_trend]
   expect:
     - {m: maop, org: {l3_country: Argentina}, p: YTD-2026-10}
 - id: trend_ca_power_margin
   category: trend
-  q: How has the MAOP margin of Canada Power & Utilities developed since 2022?
+  q: How has the operating margin of Canada Power & Utilities developed since 2022?
   tools: [get_trend]
   text_mode: any
   expect:
@@ -217,23 +217,23 @@
     - {r: [net_income, revenue], p: FY-2025}
 
 # ------------------------------------------------------------------------------- variance drivers
-- id: drv_br_env_margin
+- id: drv_ca_env_margin
   category: drivers
-  q: Why did Brazil Environmental Lab Testing margin drop in 2026?
+  q: Why did Canada Environmental Lab Testing margin drop in 2026?
   tools: [variance_drivers]
   expect:
-    - {r: [maop, revenue], org: {l3_country: Brazil, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
-    - {r: [maop, revenue], org: {l3_country: Brazil, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10, v: PY, text: true}
-- id: drv_us_epv_7a_march
+    - {r: [maop, revenue], org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+    - {r: [maop, revenue], org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10, v: PY, text: true}
+- id: drv_us_epv_direct_staff_march
   category: drivers
-  q: Break down 7A personnel cost for US Elevators & Pressure Vessels in March 2025
+  q: Break down direct staff costs for US Elevators & Pressure Vessels in March 2025
   tools: [variance_drivers, get_pnl]
   expect:
     - {m: 7a, org: {l3_country: United States, l4_product_line: Elevators & Pressure Vessels}, p: M-2025-03}
     - {m: bonus_7a2, org: {l3_country: United States, l4_product_line: Elevators & Pressure Vessels}, p: M-2025-03, text: true}
-- id: drv_mx_maop_budget
+- id: drv_mx_op_budget
   category: drivers
-  q: What drove the change in MAOP for Mexico vs budget this year?
+  q: What drove the change in operating profit for Mexico vs budget this year?
   tools: [variance_drivers]
   expect:
     - {m: maop, org: {l3_country: Mexico}, p: YTD-2026-10}
@@ -245,9 +245,9 @@
   expect:
     - {m: subcontracting, org: {l3_country: Chile, l4_product_line: Metals & Minerals}, p: YTD-2026-10}
     - {m: subcontracting, org: {l3_country: Chile, l4_product_line: Metals & Minerals}, p: YTD-2026-10, v: Budget}
-- id: drv_ca_maop_py
+- id: drv_ca_op_py
   category: drivers
-  q: Explain the MAOP variance vs last year for Canada
+  q: Explain the operating profit variance vs last year for Canada
   tools: [variance_drivers]
   expect:
     - {m: maop, org: {l3_country: Canada}, p: YTD-2026-10}
@@ -279,7 +279,7 @@
 # ------------------------------------------------------------------------------- rankings
 - id: rank_usca_bu_margin
   category: ranking
-  q: Top 5 BUs by MAOP margin in US & Canada this year
+  q: Top 5 BUs by operating margin in US & Canada this year
   tools: [rank_entities]
   expect:
     - {rank: {r: [maop, revenue]}, level: l6_bu, within: {l2_region: US & Canada}, p: YTD-2026-10, n: 1}
@@ -291,7 +291,7 @@
     - {rank: {m: subcontracting}, level: l4_product_line, p: YTD-2026-10, n: 1}
 - id: rank_country_lowest_margin
   category: ranking
-  q: Which countries have the lowest MAOP margin this year?
+  q: Which countries have the lowest operating margin this year?
   tools: [rank_entities]
   expect:
     - {rank: {r: [maop, revenue]}, level: l3_country, p: YTD-2026-10, asc: true, n: 1}
@@ -303,7 +303,7 @@
     - {rank: {m: production}, level: l2_region, p: FY-2025, n: 1}
 - id: rank_br_bottom_businesses
   category: ranking
-  q: Bottom 3 businesses by MAOP in Brazil YTD
+  q: Bottom 3 businesses by operating profit in Brazil YTD
   tools: [rank_entities]
   expect:
     - {rank: {m: maop}, level: l5_business, within: {l3_country: Brazil}, p: YTD-2026-10, asc: true, n: 1}
@@ -361,7 +361,7 @@
     - {m: maop, org: {l3_country: Canada}, p: FY-2026, v: Budget, text: true}
 - id: ver_ar_actual_budget
   category: versions
-  q: Compare Actual and Budget MAOP by version for Argentina YTD
+  q: Compare Actual and Budget operating profit by version for Argentina YTD
   tools: [compare_versions, get_pnl]
   expect:
     - {m: maop, org: {l3_country: Argentina}, p: YTD-2026-10}
@@ -405,7 +405,7 @@
 # ------------------------------------------------------------------------------- follow-ups (memory)
 - id: fu_now_for_canada
   category: followup
-  turns: ["How is MAOP YTD vs last year and budget for the United States?"]
+  turns: ["How is operating profit YTD vs last year and budget for the United States?"]
   q: now for Canada
   tools: [get_pnl]
   expect:
@@ -414,14 +414,14 @@
     - {m: maop, org: {l3_country: Canada}, p: YTD-2026-10, v: Budget}
 - id: fu_same_for_brazil
   category: followup
-  turns: ["Show the MAOP trend for Mexico this year"]
+  turns: ["Show the operating profit trend for Mexico this year"]
   q: same for Brazil
   tools: [get_trend]
   expect:
     - {m: maop, org: {l3_country: Brazil}, p: YTD-2026-10}
 - id: fu_first_one
   category: followup
-  turns: ["Which countries have the lowest MAOP margin this year?"]
+  turns: ["Which countries have the lowest operating margin this year?"]
   q: why is the first one so low?
   tools: [variance_drivers]
   expect:
@@ -439,7 +439,7 @@
     - {r: [billable_hours, available_hours], org: {l3_country: Colombia}, p: YTD-2026-10, v: Budget}
 - id: fu_same_vs_fc2
   category: followup
-  turns: ["How is MAOP YTD vs last year and budget for the United States?"]
+  turns: ["How is operating profit YTD vs last year and budget for the United States?"]
   q: same vs FC2
   tools: [get_pnl, compare_versions]
   expect:
@@ -451,7 +451,7 @@
   category: rls
   rls: true
   persona: us_country_head
-  q: How is MAOP YTD for Brazil?
+  q: How is operating profit YTD for Brazil?
   status: refusal
 - id: rls_us_head_group_narrowed
   category: rls
@@ -472,7 +472,7 @@
   category: rls
   rls: true
   persona: env_pl_leader
-  q: Rank countries by MAOP margin this year
+  q: Rank countries by operating margin this year
   tools: [rank_entities]
   expect:
     - {rank: {r: [maop, revenue]}, level: l3_country, within: {l4_product_line: Environmental Lab Testing}, p: YTD-2026-10, n: 1}
@@ -480,15 +480,15 @@
   category: rls
   rls: true
   persona: us_country_head
-  q: Top 5 BUs by MAOP in US & Canada
+  q: Top 5 BUs by operating profit in US & Canada
   tools: [rank_entities]
   expect:
     - {rank: {m: maop}, level: l6_bu, within: {l3_country: United States}, p: YTD-2026-10, n: 1}
 
 # ------------------------------------------------------------------------------- clarification
-- id: clar_sao_paulo
+- id: clar_rio
   category: clarification
-  q: How is the Sao Paulo business doing?
+  q: How is the Rio de Janeiro business doing?
   status: clarification
 - id: clar_curitiba
   category: clarification
@@ -496,12 +496,12 @@
   status: clarification
 
 # ------------------------------------------------------------------------------- robustness (typos, leaf accounts)
-- id: typo_brazil_env_lab
+- id: typo_canada_env_lab
   category: robustness
-  q: MAOP for Brazl env lab last month
+  q: MAOP for Canda env lab last month
   tools: [get_pnl, get_trend]
   expect:
-    - {m: maop, org: {l3_country: Brazil, l4_product_line: Environmental Lab Testing}, p: M-2026-10}
+    - {m: maop, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: M-2026-10}
 - id: typo_mexico_utilisation
   category: robustness
   q: utilisation in Mexcio YTD
@@ -516,14 +516,94 @@
     - {r: [wip, revenue], org: {l3_country: Mexico, l4_product_line: Buildings & Infrastructure}, p: H1-2026}
 - id: bonus_march_vs_py
   category: robustness
-  q: How much 7A bonus did US Elevators & Pressure Vessels book in March 2025 vs March 2024?
+  q: How much direct staff bonus did US Elevators & Pressure Vessels book in March 2025 vs March 2024?
   tools: [get_trend, variance_drivers, get_pnl]
   expect:
     - {m: bonus_7a2, org: {l3_country: United States, l4_product_line: Elevators & Pressure Vessels}, p: M-2025-03}
     - {m: bonus_7a2, org: {l3_country: United States, l4_product_line: Elevators & Pressure Vessels}, p: M-2025-03, v: PY}
-- id: restructuring_br_env
+- id: restructuring_ca_env
   category: robustness
-  q: What restructuring costs did Brazil Environmental Lab Testing book this year?
+  q: What restructuring costs did Canada Environmental Lab Testing book this year?
   tools: [get_trend, get_pnl, variance_drivers]
   expect:
-    - {m: restructuring, org: {l3_country: Brazil, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+    - {m: restructuring, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+
+# ------------------------------------------------------------------------------- workforce (employee records)
+- id: wf_ca_env_attrition_role
+  category: workforce
+  q: Attrition by role for Canada Environmental Lab Testing this year vs last year
+  tools: [get_workforce]
+  expect:
+    - {w: attrition, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+    - {w: attrition, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10, v: PY}
+    - {w: attrition, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, emp: {role: Lab technician}, p: YTD-2026-10}
+- id: wf_ca_env_monthly
+  category: workforce
+  q: Headcount, hires and leavers by month for Canada Environmental Lab Testing this year
+  tools: [get_workforce]
+  expect:
+    - {w: headcount, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+    - {w: hires, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+    - {w: leavers, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: M-2026-04}
+- id: wf_ca_env_restructuring
+  category: workforce
+  q: How many restructuring leavers did Canada Environmental Lab Testing have this year?
+  tools: [get_workforce]
+  expect:
+    - {w: restructuring_leavers, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+    - {w: leavers, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+- id: wf_us_utilization_grade
+  category: workforce
+  q: Utilization rate by grade in the United States this year
+  tools: [get_workforce]
+  expect:
+    - {w: utilization, org: {l3_country: United States}, p: YTD-2026-10}
+    - {w: utilization, org: {l3_country: United States}, emp: {grade: G1}, p: YTD-2026-10}
+- id: wf_bu_highest_attrition
+  category: workforce
+  q: Which BUs have the highest attrition this year?
+  tools: [get_workforce]
+  expect:
+    - {rank: {w: attrition}, level: l6_bu, p: YTD-2026-10, n: 1}
+- id: wf_mx_leavers_2025
+  category: workforce
+  q: How many employees left Mexico in 2025?
+  tools: [get_workforce]
+  expect:
+    - {w: leavers, org: {l3_country: Mexico}, p: FY-2025}
+    - {w: restructuring_leavers, org: {l3_country: Mexico}, p: FY-2025}
+- id: wf_group_direct_indirect
+  category: workforce
+  q: Headcount of direct vs indirect staff for the group this year
+  tools: [get_workforce]
+  expect:
+    - {w: headcount, p: YTD-2026-10}
+    - {w: headcount, emp: {staff_type: Direct}, p: YTD-2026-10}
+- id: wf_ca_voluntary_attrition
+  category: workforce
+  q: What is the voluntary attrition rate in Canada this year?
+  tools: [get_workforce]
+  expect:
+    - {w: voluntary_attrition, org: {l3_country: Canada}, p: YTD-2026-10}
+- id: wf_fu_now_for_us
+  category: followup
+  turns: ["Attrition by role for Canada Environmental Lab Testing this year"]
+  q: now for the United States
+  tools: [get_workforce]
+  expect:
+    - {w: attrition, org: {l3_country: United States, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+- id: wf_rls_us_head_brazil_refused
+  category: rls
+  rls: true
+  persona: us_country_head
+  q: What is the attrition rate in Brazil this year?
+  status: refusal
+- id: wf_rls_env_leader_countries
+  category: rls
+  rls: true
+  persona: env_pl_leader
+  q: Attrition by country this year
+  tools: [get_workforce]
+  expect:
+    - {w: attrition, org: {l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+    - {w: attrition, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}

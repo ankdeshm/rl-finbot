@@ -78,8 +78,8 @@ def test_sign_convention_and_display(raw):
         assert by_line[ln] < 0, ln                               # costs negative in storage
     sl = SemanticLayer("group_cfo", AS_OF)
     res = sl.ratio("personnel_to_revenue", {}, ti.Period("FY", 202512), [])
-    assert res.df["Personnel charges"].iloc[0] > 0               # display value = magnitude
-    assert 0.3 < res.df["Personnel charges / Revenue"].iloc[0] < 0.7
+    assert res.df["Personnel costs"].iloc[0] > 0                 # display value = magnitude
+    assert 0.3 < res.df["Personnel costs / Revenue"].iloc[0] < 0.7
 
 
 def test_favourability_rules():
@@ -143,7 +143,7 @@ def test_latest_forecast_rule():
 @pytest.mark.parametrize("q,expected", [
     ("MAOP for Mexico B&I", {"l3_country": ["Mexico"], "l4_product_line": ["Buildings & Infrastructure"]}),
     ("lifts in the US", {"l3_country": ["United States"], "l4_product_line": ["Elevators & Pressure Vessels"]}),
-    ("env lab Brazl last month", {"l3_country": ["Brazil"], "l4_product_line": ["Environmental Lab Testing"]}),
+    ("env lab Canda last month", {"l3_country": ["Canada"], "l4_product_line": ["Environmental Lab Testing"]}),
     ("How is US & Canada doing?", {"l2_region": ["US & Canada"]}),
     ("MAOP in South America", {"l2_region": ["Northern South America", "Southern South America", "BPU"]}),
     ("Chile metals and minerals", {"l3_country": ["Chile"], "l4_product_line": ["Metals & Minerals"]}),
@@ -217,3 +217,69 @@ def test_cockpit_has_all_kpis():
     assert len(res.df) == 11 and res.df["YTD"].notna().all()
     util = res.df.set_index("_code").loc["utilization_rate", "YTD"]
     assert 0.6 < util < 0.95
+
+
+# --------------------------------------------------------------------------- neutral labels
+def test_labels_are_generic():
+    sl = SemanticLayer("group_cfo", AS_OF)
+    labels = [r["label"] for r in sl.pnl_rows(3)]
+    assert "Operating profit".upper() in labels and "EBIT" in labels
+    assert not any(re.match(r"^\d", lab) for lab in labels), "P&L labels must not show line numbers or codes"
+    text = " ".join(labels + list(dims().org["l5_business"]) + list(dims().org["city"]))
+    for word in ("MAOP", "AD50", "B26", "Santiago", "Management OP", "neutralization"):
+        assert word.lower() not in text.lower(), word
+
+
+def test_environmental_lab_only_in_canada_and_us():
+    env = dims().org[dims().org["l4_product_line"] == "Environmental Lab Testing"]
+    assert set(env["l3_country"]) == {"Canada", "United States"}
+    assert (env["l3_country"] == "Canada").sum() > (env["l3_country"] == "United States").sum()
+
+
+# --------------------------------------------------------------------------- employee records
+def test_employee_records_add_up_to_bu_stats(raw):
+    emp = raw("""SELECT f.bu_id, f.month_key, COUNT(*), SUM(f.fte), SUM(f.billable_hours), SUM(f.available_hours)
+                 FROM fact_employee_month f WHERE f.month_key BETWEEN 202501 AND 202512
+                 GROUP BY f.bu_id, f.month_key""")
+    stats = raw("""SELECT s.bu_id, s.month_key, s.headcount, s.fte, s.billable_hours, s.available_hours
+                   FROM fact_stats s JOIN dim_version v ON v.version_id = s.version_id
+                   WHERE v.name = 'Actual' AND s.month_key BETWEEN 202501 AND 202512""")
+    st = {(r[0], r[1]): r[2:] for r in stats}
+    assert len(emp) == len(st)
+    for r in emp:
+        s = st[(r[0], r[1])]
+        assert abs(float(r[2]) - float(s[0])) < 1e-6 and abs(float(r[3]) - float(s[1])) < 0.01
+        assert abs(float(r[4]) - float(s[2])) < 0.5 and abs(float(r[5]) - float(s[3])) < 0.5
+
+
+def test_workforce_matches_stats_and_counts_leavers(raw):
+    sl = SemanticLayer("group_cfo", AS_OF)
+    org = {"l3_country": ["Canada"], "l4_product_line": ["Environmental Lab Testing"]}
+    res = sl.workforce(org, ti.Period("YTD", 202610), "role", "attrition")
+    total = res.df.iloc[0]
+    assert total["_kind"] == "subtotal" and res.meta["has_py"]
+    p = ti.Period("YTD", 202610)
+    w = sl.frame([ti.Series("Actual", "Actual", p, tuple(p.months()))], org, with_stats=True).iloc[0]
+    assert abs(total["Avg headcount"] - w["headcount_sum"] / w["n_months"]) < 1e-6
+    assert abs(total["Utilization"] - w["billable_hours_sum"] / w["available_hours_sum"]) < 1e-6
+    leavers = raw("""SELECT COUNT(*) FROM fact_employee_month f JOIN dim_org o ON o.bu_id = f.bu_id
+                     WHERE f.is_leaver = :t AND f.month_key BETWEEN 202601 AND 202610
+                     AND o.l3_country = 'Canada' AND o.l4_product_line = 'Environmental Lab Testing'""", t=True)[0][0]
+    assert total["Leavers"] == leavers
+    assert abs(total["Attrition"] - leavers * 12 / 10 / total["Avg headcount"]) < 1e-9
+    assert abs(res.df.iloc[1:]["Leavers"].sum() - leavers) < 1e-9          # roles add up to the total
+
+
+@pytest.mark.skipif(backend() != "mssql", reason="native RLS only on SQL Server")
+def test_native_rls_on_employee_tables():
+    from sqlalchemy import create_engine, text
+
+    from app.db import mssql_url
+    eng = create_engine(mssql_url(admin=False))
+    with eng.connect() as c:
+        assert c.execute(text("SELECT COUNT(*) FROM dim_employee")).scalar() == 0         # no session context
+        c.execute(text("EXEC sp_set_session_context @key=N'user_id', @value=N'us_country_head', @read_only=1"))
+        countries = [r[0] for r in c.execute(text(
+            "SELECT DISTINCT o.l3_country FROM fact_employee_month f JOIN dim_org o ON o.bu_id = f.bu_id")).fetchall()]
+        assert countries == ["United States"]
+    eng.dispose()

@@ -2,7 +2,7 @@
 
 trend -> line (Actual vs PY vs Budget, R12M dashed) | variance / bridge -> waterfall |
 cost mix / break down -> stacked bar | ranking -> horizontal bar | ratio -> bar |
-version comparison -> grouped bar
+version comparison -> grouped bar | workforce -> line by month, horizontal bar by group
 """
 from __future__ import annotations
 
@@ -11,10 +11,17 @@ import plotly.graph_objects as go
 from app.viz import format as F
 
 COLORS = {"Actual": "#0B3D91", "PY": "#A6ACAF", "Budget": "#E67E22", "FC1": "#85C1E9",
-          "FC2": "#2E86C1", "FC3": "#1B4F72", "Actual R12M": "#17A589"}
+          "FC2": "#2E86C1", "FC3": "#1B4F72", "Actual R12M": "#17A589", "Hires": "#17A589", "Leavers": "#C0392B"}
 FAV, UNFAV, NEUTRAL, TOTAL = "#1E8449", "#C0392B", "#7F8C8D", "#0B3D91"
 SERIES_PALETTE = ["#0B3D91", "#2E86C1", "#85C1E9", "#E67E22", "#F5B041", "#17A589", "#76D7C4",
                   "#7D3C98", "#BB8FCE", "#A6ACAF"]
+WF_FORMATS = {"headcount": "num", "fte": "num", "hires": "count", "leavers": "count", "restructuring_leavers": "count",
+              "attrition": "pct", "voluntary_attrition": "pct", "utilization": "pct", "overtime": "pct"}
+WF_PY = {"headcount": "Headcount PY", "attrition": "Attrition PY", "utilization": "Utilization PY"}
+WF_NAMES = {"headcount": "Headcount", "fte": "FTE", "hires": "Hires", "leavers": "Leavers",
+            "restructuring_leavers": "Restructuring leavers", "attrition": "Attrition (annualised)",
+            "voluntary_attrition": "Voluntary attrition (annualised)", "utilization": "Utilization (direct staff)",
+            "overtime": "Overtime ratio (direct staff)"}
 
 
 def _none(reason: str = "") -> dict:
@@ -32,6 +39,8 @@ def chart_spec(out: dict, intents: list[str] | None = None) -> dict:
                 "x": "Month", "y": meta.get("series", []), "data": data, "meta": {}}
     if kind == "pnl":
         return _pnl_bridge(data, meta, org, period)
+    if kind == "workforce":
+        return _workforce_chart(data, meta, org, period)
     if kind == "cockpit":
         trend = (out.get("extra") or {}).get("trend") or []
         return {"type": "combo", "title": f"Direct margin by month - {org} (Actual bars, LY and Budget lines)",
@@ -79,25 +88,53 @@ def _pnl_bridge(data, meta, org, period) -> dict:
     primary = labels[0]
     cmp_ = "PY" if "PY" in labels[1:] else (labels[1] if len(labels) > 1 else None)
     steps = [("6", "Production"), ("7", "Personnel"), ("8", "Ext. subcontracting"), ("9", "Other costs"),
-             ("10", "Functional neutr."), ("12", "Functional costs")]
+             ("10", "Functional recharges"), ("12", "Functional costs")]
     if "13" not in by:
         return _none()
     rows = []
     if cmp_:
-        rows.append({"label": f"MAOP {cmp_}", "value": by["13"][cmp_], "measure": "absolute"})
+        rows.append({"label": f"Op. profit {cmp_}", "value": by["13"][cmp_], "measure": "absolute"})
         for code, name in steps:
             if code in by and by[code].get(f"Var vs {cmp_}") is not None:
                 rows.append({"label": name, "value": by[code][f"Var vs {cmp_}"], "measure": "relative"})
-        rows.append({"label": f"MAOP {primary}", "value": by["13"][primary], "measure": "total"})
-        title = f"MAOP bridge {cmp_} to {primary} - {org} ({period})"
+        rows.append({"label": f"Op. profit {primary}", "value": by["13"][primary], "measure": "total"})
+        title = f"Operating profit bridge {cmp_} to {primary} - {org} ({period})"
     else:
         rows.append({"label": "Production", "value": by["6"][primary], "measure": "absolute"})
         for code, name in steps[1:]:
             rows.append({"label": name, "value": by[code][primary], "measure": "relative"})
-        rows.append({"label": "MAOP", "value": by["13"][primary], "measure": "total"})
-        title = f"Production to MAOP - {org} ({period})"
+        rows.append({"label": "Operating profit", "value": by["13"][primary], "measure": "total"})
+        title = f"Production to operating profit - {org} ({period})"
     return {"type": "waterfall", "title": title, "fmt": "eur", "x": "label", "y": ["value"], "data": rows,
             "meta": {"favorable": "up"}}
+
+
+def _workforce_chart(data, meta, org, period) -> dict:
+    focus = meta.get("focus", "headcount")
+    cols, label = meta.get("cols") or {}, meta.get("group_label", "Scope")
+    fcol, fmt, name = cols.get(focus, "Avg headcount"), WF_FORMATS.get(focus, "num"), WF_NAMES.get(focus, focus)
+    body = [r for r in data if r.get("_kind") != "subtotal"]
+    pycol = WF_PY.get(focus) if meta.get("has_py") else None
+    if meta.get("group") == "month" and body:
+        name = name.replace("annualised", "rolling 12 months")
+        if focus in ("hires", "leavers", "restructuring_leavers") or meta.get("chart") == "hires_leavers":
+            rows = [{"category": r[label], "series": s, "value": r.get(s)} for r in body for s in ("Hires", "Leavers")]
+            return {"type": "grouped_bar", "title": f"Hires and leavers by month - {org} ({period})", "fmt": "count",
+                    "x": "category", "y": ["Hires", "Leavers"], "data": rows, "meta": {}}
+        rows = [{"Month": r[label], "Actual": r.get(fcol), **({"PY": r.get(pycol)} if pycol else {})} for r in body]
+        return {"type": "line", "title": f"{name} by month - {org} ({period})", "fmt": fmt, "x": "Month",
+                "y": ["Actual"] + (["PY"] if pycol else []), "data": rows, "meta": {}}
+    if body:
+        rows = [{"label": str(r[label]), "value": r.get(fcol), "fav": None} for r in body if r.get(fcol) is not None]
+        lt = label if label.isupper() else label.lower()
+        return {"type": "hbar", "title": f"{name} by {lt} - {org} ({period})", "fmt": fmt, "x": "value",
+                "y": ["label"], "data": rows, "meta": {}}
+    if data:
+        t = data[0]
+        rows = [{"label": "Actual", "value": t.get(fcol)}] + ([{"label": "PY", "value": t.get(pycol)}] if pycol else [])
+        return {"type": "bar", "title": f"{name} - {org} ({period})", "fmt": fmt, "x": "label", "y": ["value"],
+                "data": rows, "meta": {}}
+    return _none()
 
 
 def _drivers_chart(out: dict, intents: list[str]) -> dict:
@@ -157,7 +194,7 @@ def _tickformat(fmt: str) -> str | None:
 def waterfall_range(ys: list, measures: list) -> list | None:
     """Value-axis range for a bridge whose steps are small next to its totals (None = autorange).
 
-    Finance bridges such as MAOP PY -> Actual have totals far from zero and steps of a few percent;
+    Finance bridges such as operating profit PY -> Actual have totals far from zero and steps of a few percent;
     starting the axis at zero makes the steps unreadable. The axis is zoomed only when every running
     level is positive and the lowest level is at least 35% of the highest.
     """
@@ -201,6 +238,8 @@ def figure(spec: dict, units: str = "M") -> go.Figure | None:
             return f"{v / scale:,.{1 if (units == 'M' or scale == 1.0) else 0}f}"
         if fmt in ("pct", "pp"):
             return f"{v * 100:.1f}%"
+        if fmt == "count" or abs(v) >= 100:
+            return f"{v:,.0f}"
         return f"{v:,.1f}"
 
     zoom = None
@@ -257,7 +296,8 @@ def figure(spec: dict, units: str = "M") -> go.Figure | None:
     fig.update_layout(
         title={"text": spec.get("title", ""), "font": {"size": 15}}, template="plotly_white", height=430,
         margin={"l": 40, "r": 20, "t": 60, "b": 40}, legend={"orientation": "h", "y": -0.18},
-        font={"family": "Inter, Segoe UI, Helvetica, Arial, sans-serif", "size": 12}, showlegend=t != "waterfall")
+        font={"family": "Inter, Segoe UI, Helvetica, Arial, sans-serif", "size": 12},
+        showlegend=t != "waterfall" and len(fig.data) > 1)
     axis = "xaxis" if t == "hbar" else "yaxis"
     if _tickformat(fmt):
         fig.update_layout(**{axis: {"tickformat": _tickformat(fmt)}})

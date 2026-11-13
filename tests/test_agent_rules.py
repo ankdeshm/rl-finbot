@@ -10,15 +10,19 @@ from app.agent.graph import ask
 
 AS_OF = date(2026, 11, 12)
 EXAMPLES = [
-    ("How is MAOP YTD vs last year and budget for the United States?", "get_pnl", "waterfall"),
+    ("How is operating profit YTD vs last year and budget for the United States?", "get_pnl", "waterfall"),
     ("Show personnel cost as % of revenue trend for Environmental Lab Testing since 2023", "get_trend", "line"),
-    ("Why did Brazil Environmental Lab Testing margin drop in 2026?", "variance_drivers", "waterfall"),
-    ("Top 5 BUs by MAOP margin in US & Canada this year", "rank_entities", "hbar"),
+    ("Why did Canada Environmental Lab Testing margin drop in 2026?", "variance_drivers", "waterfall"),
+    ("Top 5 BUs by operating margin in US & Canada this year", "rank_entities", "hbar"),
     ("Compare Budget vs FC2 vs Actual for Chile Metals & Minerals", "compare_versions", "grouped_bar"),
-    ("Break down 7A personnel cost for US Elevators & Pressure Vessels in March 2025", "variance_drivers", "stacked_bar"),
+    ("Break down direct staff costs for US Elevators & Pressure Vessels in March 2025", "variance_drivers", "stacked_bar"),
     ("What happened to WIP in Mexico Buildings & Infrastructure this year?", "get_trend", "line"),
     ("Subcontracting cost by product line YTD vs PY", "rank_entities", "hbar"),
     ("Show the operational profitability cockpit for Canada", "get_kpi_cockpit", "combo"),
+    ("Headcount, hires and leavers by month for Canada Environmental Lab Testing this year", "get_workforce", "grouped_bar"),
+    ("Attrition by role for Canada Environmental Lab Testing this year vs last year", "get_workforce", "hbar"),
+    ("Utilization rate by grade in the United States this year", "get_workforce", "hbar"),
+    ("Which BUs have the highest attrition this year?", "get_workforce", "hbar"),
 ]
 
 
@@ -34,7 +38,7 @@ def test_examples_rules_mode(q, tool, chart):
 
 
 def test_followup_uses_memory():
-    ans1, mem = ask("How is MAOP YTD vs last year and budget for the United States?", "group_cfo",
+    ans1, mem = ask("How is operating profit YTD vs last year and budget for the United States?", "group_cfo",
                     model="rules", as_of=AS_OF)
     ans2, mem2 = ask("now for Canada", "group_cfo", memory=mem, model="rules", as_of=AS_OF)
     assert ans2.status == "ok"
@@ -42,8 +46,14 @@ def test_followup_uses_memory():
     assert ans2.diagnostics["tool_calls"][0]["name"] == "get_pnl"
 
 
+def test_maop_still_understood_as_operating_profit():
+    ans, _ = ask("How is MAOP YTD vs last year and budget for the United States?", "group_cfo", model="rules", as_of=AS_OF)
+    assert ans.status == "ok" and ans.answer_markdown.startswith("**Operating profit: Actual USD")
+    assert "MAOP" not in ans.answer_markdown and "MAOP" not in " ".join(ans.followups)
+
+
 def test_ordinal_followup_refers_to_ranked_entity():
-    ans1, mem = ask("Which countries have the lowest MAOP margin this year?", "group_cfo", model="rules", as_of=AS_OF)
+    ans1, mem = ask("Which countries have the lowest operating margin this year?", "group_cfo", model="rules", as_of=AS_OF)
     first = ans1.table[0]["Country"]
     ans2, _ = ask("why is the first one so low?", "group_cfo", memory=mem, model="rules", as_of=AS_OF)
     assert ans2.status == "ok"
@@ -52,7 +62,7 @@ def test_ordinal_followup_refers_to_ranked_entity():
 
 
 def test_rls_refusal_never_returns_data():
-    ans, _ = ask("How is MAOP YTD for Brazil?", "us_country_head", model="rules", as_of=AS_OF)
+    ans, _ = ask("How is operating profit YTD for Brazil?", "us_country_head", model="rules", as_of=AS_OF)
     assert ans.status == "refusal"
     assert not ans.table and not ans.sql_used
     assert "access" in ans.answer_markdown.lower()
@@ -90,12 +100,12 @@ def test_llm_actual_only_call_keeps_comparisons_unless_asked():
 
 def test_pnl_states_the_account_asked_about():
     # A single account (restructuring) asked via get_pnl at line depth: the account must still be stated first.
-    q = "What restructuring costs did Brazil Environmental Lab Testing book this year?"
-    out = _pnl_call(q, {"org": "Brazil Environmental Lab Testing", "account_depth": 1})
+    q = "What restructuring costs did Canada Environmental Lab Testing book this year?"
+    out = _pnl_call(q, {"org": "Canada Environmental Lab Testing", "account_depth": 1})
     name = out.meta["focus_name"]
     assert name and "estructuring" in name
     assert out.facts[1].startswith(f"{name}: Actual USD") and out.bullets[0].startswith(f"{name}: Actual USD")
-    assert not any(f.startswith("MAOP vs") for f in out.facts)     # MAOP drivers do not explain one account
+    assert not any(f.startswith("Operating profit vs") for f in out.facts)   # its drivers do not explain one account
 
 
 def test_vs_budget_question_keeps_actual_as_main_version():
@@ -109,7 +119,7 @@ def test_vs_budget_question_keeps_actual_as_main_version():
 
 def test_headline_figure_is_the_first_bullet():
     out = _pnl_call("How is the whole group doing this year vs budget?", {"org": "RL Group"})
-    assert out.bullets[0].startswith("MAOP: Actual USD")
+    assert out.bullets[0].startswith("Operating profit: Actual USD")
     from app.agent.tools import ToolContext, run_tool
     q = "Why is Chile Metals & Minerals subcontracting above budget?"
     drv = run_tool("variance_drivers", {"metric": "subcontracting", "org": "Chile Metals & Minerals",
@@ -120,10 +130,58 @@ def test_headline_figure_is_the_first_bullet():
 def test_followup_keeps_the_previous_tool(monkeypatch):
     # "now for Canada" after a P&L question: an LLM that switches to the cockpit is overruled.
     from app.agent import graph, llm
-    _, mem = ask("How is MAOP YTD vs last year and budget for the United States?", "group_cfo", model="rules", as_of=AS_OF)
+    _, mem = ask("How is operating profit YTD vs last year and budget for the United States?", "group_cfo",
+                 model="rules", as_of=AS_OF)
     fake = llm.LLMResult(content="", tool_calls=[{"name": "get_kpi_cockpit", "arguments": {"org": "Canada"}}],
                          native_tool_call=True)
     monkeypatch.setattr(graph.llm, "chat", lambda *a, **k: fake)
     ans, _ = ask("now for Canada", "group_cfo", memory=mem, model="ollama/stub", as_of=AS_OF)
     assert ans.status == "ok" and ans.diagnostics["tool_calls"][0]["name"] == "get_pnl"
     assert "router_followup" in ans.diagnostics["tool_choice_source"]
+
+
+# ------------------------------------------------------------------------------- workforce
+def test_workforce_followups_keep_grouping_and_figure():
+    _, mem = ask("Attrition by role for Canada Environmental Lab Testing this year", "group_cfo", model="rules", as_of=AS_OF)
+    assert mem["wf_group"] == "role" and mem["wf_focus"] == "attrition"
+    ans, mem2 = ask("now for the United States", "group_cfo", memory=mem, model="rules", as_of=AS_OF)
+    assert ans.status == "ok" and ans.diagnostics["tool_calls"][0]["name"] == "get_workforce"
+    assert ans.filters_used["org_filter"] == {"l3_country": ["United States"],
+                                              "l4_product_line": ["Environmental Lab Testing"]}
+    assert mem2["wf_group"] == "role" and ans.answer_markdown.startswith("**Attrition rate (annualised):")
+    ans3, mem3 = ask("and by grade?", "group_cfo", memory=mem2, model="rules", as_of=AS_OF)
+    assert ans3.status == "ok" and mem3["wf_group"] == "grade" and ans3.table_spec["columns"][0] == "Grade"
+
+
+def test_workforce_story_restructuring_in_canada_env_lab():
+    ans, _ = ask("How many employees left Canada Environmental Lab Testing this year?", "group_cfo",
+                 model="rules", as_of=AS_OF)
+    assert ans.status == "ok" and ans.diagnostics["tool_calls"][0]["name"] == "get_workforce"
+    total = ans.table[0]
+    assert total["_kind"] == "subtotal" and total["of which restructuring"] >= 40
+    assert total["Attrition"] > 2 * total["Attrition PY"]
+    assert "Month with the most leavers: Apr 2026" in ans.answer_markdown
+
+
+def test_workforce_respects_access_scope():
+    ans, _ = ask("What is the attrition in Brazil this year?", "us_country_head", model="rules", as_of=AS_OF)
+    assert ans.status == "refusal" and not ans.table and not ans.sql_used
+    ans, _ = ask("Attrition by country this year", "env_pl_leader", model="rules", as_of=AS_OF)
+    assert ans.status == "ok"
+    assert {r["Country"] for r in ans.table if r["_kind"] != "subtotal"} == {"Canada", "United States"}
+
+
+def test_turnover_alone_is_revenue_not_attrition():
+    ans, _ = ask("What was turnover in Mexico in 2025?", "group_cfo", model="rules", as_of=AS_OF)
+    assert ans.status == "ok" and ans.diagnostics["tool_calls"][0]["name"] != "get_workforce"
+    ans, _ = ask("What was staff turnover in Mexico in 2025?", "group_cfo", model="rules", as_of=AS_OF)
+    assert ans.diagnostics["tool_calls"][0]["name"] == "get_workforce"
+
+
+def test_text_tool_call_parser_knows_every_tool():
+    # Small models print tool calls as JSON text; a tool missing from the parser's list is silently dropped.
+    from app.agent import llm
+    from app.agent.tools import TOOLS
+    assert set(TOOLS) <= set(llm.TOOL_NAMES)
+    calls = llm.calls_from_text('{"name": "get_workforce", "arguments": {"org": "Canada", "group_by": "role"}}')
+    assert calls and calls[0]["name"] == "get_workforce" and calls[0]["arguments"]["group_by"] == "role"

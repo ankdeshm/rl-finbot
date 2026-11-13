@@ -117,9 +117,38 @@ user_org_access = Table(
     Column("org_value", Unicode(100), primary_key=True),
 )
 
+# Fictional employees (codes only, no names) and their monthly hours (Actual months)
+dim_employee = Table(
+    "dim_employee", metadata,
+    Column("employee_id", Integer, primary_key=True, autoincrement=False),
+    Column("employee_code", Unicode(12), nullable=False),
+    Column("bu_id", Integer, nullable=False),
+    Column("role", Unicode(40), nullable=False),
+    Column("grade", Unicode(4), nullable=False),
+    Column("staff_type", Unicode(10), nullable=False),
+    Column("fte_pct", Numeric(4, 2), nullable=False),
+    Column("hire_date", Date, nullable=False),
+    Column("leave_date", Date, nullable=True),
+    Column("leave_reason", Unicode(20), nullable=True),
+)
+
+fact_employee_month = Table(
+    "fact_employee_month", metadata,
+    Column("month_key", Integer, primary_key=True, autoincrement=False),
+    Column("employee_id", Integer, primary_key=True, autoincrement=False),
+    Column("bu_id", Integer, nullable=False),
+    Column("fte", Numeric(4, 2), nullable=False),
+    Column("available_hours", Numeric(8, 1), nullable=False),
+    Column("billable_hours", Numeric(8, 1), nullable=False),
+    Column("overtime_hours", Numeric(8, 1), nullable=False),
+    Column("is_hire", Boolean, nullable=False),
+    Column("is_leaver", Boolean, nullable=False),
+)
+
 TABLE_LOAD_ORDER = [
     "dim_org", "dim_account", "dim_version", "dim_period",
     "app_user", "user_org_access", "fact_pnl", "fact_stats",
+    "dim_employee", "fact_employee_month",
 ]
 
 QUERY_TIMEOUT_SECONDS = 30

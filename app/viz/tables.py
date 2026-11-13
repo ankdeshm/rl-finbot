@@ -105,6 +105,26 @@ def build_table(out: dict) -> dict:
         t["columns"] = cols
         t["col_fmt"] = {"Rank": "int", cur: fmt, "PY": fmt, "Var": "pp" if fmt == "pct" else fmt, "Var %": "pct"}
         t["row_meta"] = [{"kind": "line", "level": 0, "fmt": None, "fav": {"Var": r.get("_fav"), "Var %": r.get("_fav")}} for r in data]
+    elif kind == "workforce":
+        label, cm = meta.get("group_label", "Scope"), meta.get("cols") or {}
+        hc, fte = cm.get("headcount", "Avg headcount"), cm.get("fte", "Avg FTE")
+        cols = [label, hc, "Headcount PY"] + ([fte] if meta.get("focus") == "fte" else []) + [
+            "Hires", "Leavers", "of which restructuring", "Attrition", "Attrition PY", "Utilization", "Utilization PY",
+            "Overtime ratio"]
+        if not meta.get("has_py"):
+            cols = [c for c in cols if not c.endswith(" PY")]
+        t["columns"] = cols
+        t["table_class"] = "wf"                     # many columns: headers may wrap
+        t["col_fmt"] = {hc: "num", "Headcount PY": "num", fte: "num", "Hires": "int", "Leavers": "int",
+                        "of which restructuring": "int", "Attrition": "pct", "Attrition PY": "pct", "Utilization": "pct",
+                        "Utilization PY": "pct", "Overtime ratio": "pct"}
+        t["row_meta"] = [{"kind": r.get("_kind", "line"), "level": 0, "fmt": None,
+                          "fav": {"Attrition": r.get("_fav_Attrition"), "Utilization": r.get("_fav_Utilization")}}
+                         for r in data]
+        t["caption"] = ("Fictional employee records, closed months. Headcount and FTE are monthly averages; attrition = "
+                        "leavers x 12 / months / average headcount"
+                        + (" (monthly rows: rolling 12 months to that month)" if meta.get("group") == "month" else "")
+                        + "; utilization and overtime use direct staff hours. Green / red = better / worse than PY.")
     else:
         cols = [c for c in data[0].keys() if not str(c).startswith("_")]
         t["columns"] = cols
@@ -128,7 +148,7 @@ def _cell(v, fmt: str | None, units: str) -> str:
         s = f"{abs(v):,.1f}" if abs(v) < 10 else f"{abs(v):,.0f}"
         return f"({s})" if v < 0 and s.strip("0.,") else s
     if fmt == "int":
-        return f"{int(v)}"
+        return f"{int(round(v)):,}"
     return html.escape(str(v))
 
 
@@ -170,7 +190,8 @@ def render_html(t: dict, units: str = "k") -> str:
             style = f' style="padding-left:{8 + 16 * int((m or {}).get("level", 0))}px"' if i == 0 else ""
             tds.append(f'<td class="{"num" if i else "label"}{fcls}"{style}>{txt}</td>')
         body.append(f'<tr class="{cls}">{"".join(tds)}</tr>')
-    return (f'<div class="fin-wrap"><table class="fin-table"><thead><tr>{head}</tr></thead>'
+    extra_cls = f" {t['table_class']}" if t.get("table_class") else ""
+    return (f'<div class="fin-wrap"><table class="fin-table{extra_cls}"><thead><tr>{head}</tr></thead>'
             f'<tbody>{"".join(body)}</tbody></table>'
             f'<div class="fin-caption">{html.escape(_caption(t, units))}</div></div>')
 
@@ -220,6 +241,7 @@ TABLE_CSS = """
 .fin-wrap {overflow-x:auto; margin: 0.25rem 0 0.75rem 0;}
 .fin-table {border-collapse: collapse; width: 100%; font-size: 0.86rem; font-family: Inter, 'Segoe UI', Helvetica, Arial, sans-serif;}
 .fin-table th {background:#0B3D91; color:#fff; padding:6px 8px; font-weight:600; white-space:nowrap;}
+.fin-table.wf th {white-space:normal; vertical-align:bottom; line-height:1.2;}
 .fin-table td {padding:5px 8px; border-bottom:1px solid #E5E8EB; white-space:nowrap;}
 .fin-table td.num, .fin-table th.num {text-align:right; font-variant-numeric: tabular-nums;}
 .fin-table td.label, .fin-table th.label {text-align:left;}

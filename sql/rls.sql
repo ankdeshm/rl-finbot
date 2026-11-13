@@ -1,12 +1,13 @@
 -- =============================================================================
--- Row-level security (SQL Server native) for the fact tables.
+-- Row-level security (SQL Server native) for the fact tables and the employee tables.
 -- The app connects as a least-privilege login and runs, on every new connection:
 --     EXEC sp_set_session_context @key = N'user_id', @value = <persona>, @read_only = 1;
 -- The filter predicate then keeps only rows for BUs the user may see according to
 -- dbo.user_org_access (any level L1..L6). No session context => no rows (secure default).
 -- `dbo` (the admin/loader, e.g. sa) bypasses the filter for maintenance and reconciliation.
--- Dimensions are NOT filtered: org names are not sensitive and the app needs them to tell a
--- user "you don't have access to Spain" instead of "Spain doesn't exist".
+-- Org and account dimensions are NOT filtered: org names are not sensitive and the app needs them
+-- to tell a user "you don't have access to Brazil" instead of "Brazil doesn't exist". Employee
+-- records are filtered like the facts.
 -- =============================================================================
 IF SCHEMA_ID(N'rls') IS NULL EXEC (N'CREATE SCHEMA rls AUTHORIZATION dbo');
 GO
@@ -39,7 +40,9 @@ GO
 
 CREATE SECURITY POLICY rls.OrgAccessPolicy
     ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_pnl,
-    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_stats
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_stats,
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.dim_employee,
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_employee_month
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 

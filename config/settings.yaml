@@ -3,10 +3,10 @@
 
 company: "RL Group"
 company_long: "RL Certification & Inspection"
-# Reporting currency. ASSUMPTION: all amounts are translated at the budget rate B26 (constant
-# currency), matching the "Currency USD / Rate code B26" filters of the existing Tableau reports.
+# Reporting currency. ASSUMPTION: all amounts are translated at one constant budget exchange rate
+# (constant currency), as management reporting usually does.
 currency: "USD"
-fx_rate_code: "B26"
+fx_rate_label: "constant budget rate"
 
 # Point-in-time for the whole prototype. Months whose close date (5th of the following
 # month) is on/before this date are "closed" and have Actuals.
