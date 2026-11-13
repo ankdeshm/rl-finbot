@@ -12,7 +12,7 @@ in [README.md](README.md); raw outputs are in [`results/`](results/).
 | Public URL (`make tunnel`) | cloudflared is banned; a public tunnel from a corporate project would bypass security controls | `make tunnel` is implemented for non-corporate environments but was not run. The UI is reached with `make k8s-forward` (authenticated port-forward) |
 | Docker validation | No Docker daemon available | The Dockerfile was built in-cluster with kaniko (`--no-push`) in about 63 s; log in `results/build/` |
 | Vertex AI Gemini comparison | (1) Project IAM change denied for the user account. (2) The user's OAuth token type is rejected by Vertex AI (`ACCESS_TOKEN_TYPE_UNSUPPORTED`). (3) The pod's Workload Identity reaches Vertex but lacks `aiplatform.endpoints.predict` | Not run. One IAM binding (`roles/aiplatform.user` for the dev service account) enables it; the code path is in place (`LLM_MODEL=vertex_ai/gemini-2.5-flash`) |
-| GitHub | No token or SSH key on the laptop | Local git repo + `scripts/publish_github.sh` (`GITHUB_TOKEN=... ./scripts/publish_github.sh`) |
+| GitHub | No token on the laptop, and its SSH key is not registered with GitHub (`Permission denied (publickey)`) | Local git repo + `scripts/publish_github.sh` (`GITHUB_TOKEN=... ./scripts/publish_github.sh`) |
 
 ## 2. Progression
 
@@ -47,6 +47,10 @@ in [README.md](README.md); raw outputs are in [`results/`](results/).
 | Trend facts averaged monthly percentages | Yearly values were the mean of monthly ratios | Yearly ratio = sum(numerator) / sum(denominator) over the months shown |
 | Schema test failed on SQL Server syntax | sqlglot cannot parse `SELECT @sql += …` | The test parses only the CREATE TABLE statements |
 | UI deprecation warnings | `use_container_width` is deprecated in Streamlit 1.67 | `width="stretch"` |
+| MAOP bridge steps barely visible | The waterfall axis started at zero, with totals of about USD 50M and steps of a few USD M | The value axis zooms when every running level is positive and the lowest is at least 35% of the highest (`tests/test_charts.py`) |
+| qwen's answer to "What is the net income of Mexico this year?" never stated net income | The P&L key-figure bullets always used the same lines (production, personnel, gross profit), and the guardrail had dropped the narrative sentence that held the figure | The line the question asks about is always the first bullet |
+| The same answer said "lower net income" with nothing to compare against | The LLM planner asked `get_pnl` for Actual only, and the tool followed it | Unless the user names versions or comparisons, `get_pnl` always adds PY and Budget, as the rules router does |
+| Some redacted answers opened with "This improvement is driven by …" | The guardrail had dropped the first sentence (the headline), so the rest pointed back to a sentence that was gone and could keep unsupported causes | If the headline sentence has to be dropped, the templated answer is used instead |
 
 ## 4. Evaluation details
 

@@ -84,7 +84,11 @@ def write_answer(out_dir: Path, i: int, persona: str, q: str, ans, model: str) -
     if table:
         md += ["## Table", "", table, ""]
         for extra in ans.table_spec.get("extra_tables", []):
-            md += [f"**{extra.get('caption', 'Detail')}**", "", render_markdown(extra, "k"), ""]
+            cap = extra.get("caption", "Detail")
+            body = render_markdown(extra, "k")
+            if body.endswith(f"_{cap}_"):                 # caption already shown as the header
+                body = body[: -len(f"_{cap}_")].rstrip()
+            md += [f"**{cap}**", "", body, ""]
     if ans.chart_spec.type != "none":
         md += ["## Chart", "", f"`{ans.chart_spec.type}` - {ans.chart_spec.title} "
                f"([interactive chart]({base}_chart.html))", ""]

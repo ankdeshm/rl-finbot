@@ -660,10 +660,13 @@ def make_bullets(out: "ToolOutput") -> list[str]:
                            key=lambda c: -abs(rows[c][f"Var vs {lab}"]))[:3]
         else:
             codes = ["6", "7", "11"]
+        focus = out.meta.get("focus")
+        if focus in meta:                           # the line the question asked about comes first
+            codes = [focus] + [c for c in codes if c != focus]
         names = [meta[c][0] + ":" for c in codes if c in meta]
         picked = [strip(f) for n in names for f in facts if f.startswith(n)]
         margin = [strip(f) for f in facts if f.startswith("MAOP margin")]
-        return (picked + margin)[:4]
+        return (picked + margin)[:5 if focus in meta else 4]
     if kind == "drivers":
         b = items_of("By sub-group: ", 3) + items_of("Account drivers (largest first): ", 3)
         org = next((f for f in facts if f.startswith("By ") and "largest change first" in f), None)
@@ -709,6 +712,8 @@ def tool_get_pnl(args: GetPnlArgs, ctx: ToolContext) -> ToolOutput:
         return refusal
     period = resolve_period(ctx, args.period, args.period_type)
     versions = norm_versions(args.versions) or ["Actual", "PY", "Budget"]
+    if versions == ["Actual"] and not (ctx.resolution and (ctx.resolution.versions or ctx.resolution.comparisons)):
+        versions = ["Actual", "PY", "Budget"]      # finance users expect PY and Budget unless they ask otherwise
     if versions[0] == "PY":
         versions.insert(0, "Actual")
     res = ctx.sl.pnl(filt, period, versions, max(1, min(3, args.account_depth)))
@@ -718,6 +723,7 @@ def tool_get_pnl(args: GetPnlArgs, ctx: ToolContext) -> ToolOutput:
     if m is not None and m.kind == "line":
         focus = str(m.line)
     out.facts = facts_pnl(res, focus)
+    out.meta["focus"] = focus
     return out
 
 

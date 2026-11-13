@@ -64,3 +64,25 @@ def test_clarification_for_ambiguous_city():
     city = cities[cities > 1].index[0]
     ans, _ = ask(f"How is the {city} business doing?", "group_cfo", model="rules", as_of=AS_OF)
     assert ans.status == "clarification"
+
+
+def _pnl_call(question: str, args: dict):
+    from app.agent.tools import ToolContext, run_tool
+    from app.semantic.dims import dims
+    from app.semantic.entity_resolver import resolve
+    ctx = ToolContext(user_id="group_cfo", as_of=AS_OF, question=question,
+                      resolution=resolve(question, dims().org, AS_OF))
+    return run_tool("get_pnl", args, ctx)
+
+
+def test_pnl_bullets_lead_with_the_line_asked_about():
+    out = _pnl_call("What is the net income of Mexico this year?", {"org": "Mexico"})
+    assert out.bullets[0].startswith("Net income: Actual USD")
+
+
+def test_llm_actual_only_call_keeps_comparisons_unless_asked():
+    # An LLM planner may request Actual only; the user did not, so PY and Budget stay in.
+    out = _pnl_call("What is the net income of Mexico this year?", {"org": "Mexico", "versions": ["Actual"]})
+    assert out.meta["series"] == ["Actual", "PY", "Budget"]
+    out = _pnl_call("What is the actual net income of Mexico this year?", {"org": "Mexico", "versions": ["Actual"]})
+    assert out.meta["series"] == ["Actual"]

@@ -500,12 +500,18 @@ def node_guard(state: AgentState) -> AgentState:
 
 
 def redact_sentences(text: str, unsupported: list[str]) -> str:
-    """Drop every sentence that contains one of the unsupported number tokens."""
+    """Drop every sentence that contains one of the unsupported number tokens.
+
+    Returns "" (use the template) when the first sentence would be dropped: the headline is gone and
+    the remaining sentences refer back to it ("This improvement is driven by ...").
+    """
     bad = [u.strip("()+-−, ") for u in unsupported if u and not u.startswith("<")]
     if not bad:
         return ""
     sents = re.split(r"(?<=[.!?])\s+(?=[A-Z*_])", text.strip())
     keep = [s for s in sents if not any(b and b in s for b in bad)]
+    if not keep or keep[0] != sents[0]:
+        return ""
     return " ".join(keep).strip()
 
 

@@ -99,3 +99,5 @@ def test_redaction_drops_only_sentences_with_unsupported_numbers():
     text = "MAOP is USD 54.4M, USD 3.5M above PY. The gap vs budget is USD 9.9M. Costs rose faster than revenue."
     assert redact_sentences(text, ["9.9M"]) == "MAOP is USD 54.4M, USD 3.5M above PY. Costs rose faster than revenue."
     assert redact_sentences(text, ["<empty>"]) == ""
+    # The headline sentence itself is unsupported: use the template instead of a dangling remainder.
+    assert redact_sentences(text, ["54.4M"]) == ""
