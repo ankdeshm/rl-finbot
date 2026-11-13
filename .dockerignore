@@ -1,0 +1,16 @@
+.git
+.venv
+.env
+.deploy.env
+**/__pycache__
+.pytest_cache
+scratch
+results
+hf_space
+deploy
+docs
+tests
+data/*.parquet
+data/stories.json
+*.md
+!README.md

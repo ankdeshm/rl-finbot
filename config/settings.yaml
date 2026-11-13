@@ -1,0 +1,52 @@
+# Central configuration for data generation and the semantic layer.
+# Values flagged ASSUMPTION are documented in docs/assumptions.md.
+
+company: "RL Group"
+company_long: "RL Certification & Inspection"
+# Reporting currency. ASSUMPTION: all amounts are translated at the budget rate B26 (constant
+# currency), matching the "Currency USD / Rate code B26" filters of the existing Tableau reports.
+currency: "USD"
+fx_rate_code: "B26"
+
+# Point-in-time for the whole prototype. Months whose close date (5th of the following
+# month) is on/before this date are "closed" and have Actuals.
+as_of_date: "2026-11-12"
+close_day_of_next_month: 5
+
+# Data range
+first_year: 2022
+last_year: 2026
+
+# Reproducibility
+seed: 20261112
+
+# ASSUMPTION: number of actual months contained in each forecast version.
+# FCn = actuals for months 1..actual_months + reforecast for the remaining months.
+forecasts:
+  FC1: {actual_months: 4}
+  FC2: {actual_months: 8}
+  FC3: {actual_months: 9}
+
+# ASSUMPTION: how strongly each forecast's reforecast months lean towards the
+# true outcome (0 = pure budget, 1 = perfect foresight). Later forecasts drift closer.
+forecast_accuracy:
+  FC1: 0.45
+  FC2: 0.70
+  FC3: 0.85
+
+# Approx. number of BUs (L6) to generate
+target_bu_count: 105
+
+# ASSUMPTION: available hours per direct (production) FTE per month before holidays.
+available_hours_per_direct_fte_month: 150
+
+# Defaults used by the semantic layer / agent
+defaults:
+  period_type: "YTD"
+  comparisons: ["PY", "Budget"]
+  units: "k"
+
+# Guardrails
+sql_guard:
+  row_limit: 1000
+  timeout_seconds: 15

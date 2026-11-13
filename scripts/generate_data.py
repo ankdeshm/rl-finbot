@@ -1,0 +1,795 @@
+#!/usr/bin/env python
+"""Generate the synthetic RL Certification & Inspection management P&L (Americas), seeded.
+
+Structure mirrors the customer's AD50 monthly management P&L:
+  01 Billing, 02 WIP & UI, 03 REVENUE, 04 Intragroup revenue, 05 Intragroup subcontracting,
+  06 PRODUCTION, 07 Personnel charges (7A direct / 7B non-production), 08 External subcontracting,
+  09 Other costs, 10 Functional neutralization, 11 GROSS PROFIT, 12 Total functional costs,
+  13 MAOP (management adjusted operating profit), 17 Other operating expenses, 18 MANAGEMENT OP,
+  19 Financial result, 20 Corporate taxes, 21 NET INCOME   (+ FTE / headcount / hours statistics)
+
+Writes one Parquet file per table into data/, plus
+  data/control_totals.parquet  intended subtotals per BU x month x version (scripts/reconcile.py)
+  data/stories.json            numbers behind the injected demo stories (docs/demo_stories.md)
+
+Storage rule: amounts are SIGNED (revenue +, cost -) and only LEAF accounts are stored.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app.config import settings  # noqa: E402
+
+DATA = ROOT / "data"
+CFG = settings()
+FIRST_YEAR, LAST_YEAR = int(CFG["first_year"]), int(CFG["last_year"])
+SIM_START = FIRST_YEAR - 1                      # one extra year simulated as budget base
+N_SIM = (LAST_YEAR - SIM_START + 1) * 12
+N_OUT = (LAST_YEAR - FIRST_YEAR + 1) * 12
+AVAIL_HOURS = float(CFG["available_hours_per_direct_fte_month"])
+AS_OF = date.fromisoformat(str(CFG["as_of_date"]))
+CLOSE_DAY = int(CFG["close_day_of_next_month"])
+
+# --------------------------------------------------------------------------------------
+# Organisation: Americas
+# --------------------------------------------------------------------------------------
+COUNTRIES = {
+    #                code  region                     scale cost/FTE  tax    fx vol  fx bias hemi
+    "United States": ("US", "US & Canada",              2.4, 98000, 0.25,  0.000, 0.0,   "N"),
+    "Canada":        ("CA", "US & Canada",              1.3, 84000, 0.265, 0.002, 0.0,   "N"),
+    "Mexico":        ("MX", "Mexico",                   1.2, 29000, 0.30,  0.006, 0.0,   "N"),
+    "Colombia":      ("CO", "Northern South America",   0.7, 21000, 0.35,  0.006, 0.0,   "S"),
+    "Peru":          ("PE", "Northern South America",   0.7, 20000, 0.295, 0.004, 0.0,   "S"),
+    "Ecuador":       ("EC", "Northern South America",   0.45, 19000, 0.25, 0.000, 0.0,   "S"),
+    "Argentina":     ("AR", "Southern South America",   0.7, 23000, 0.35,  0.020, -0.006, "S"),
+    "Chile":         ("CL", "Southern South America",   0.9, 35000, 0.27,  0.005, 0.0,   "S"),
+    "Brazil":        ("BR", "BPU",                      1.3, 31000, 0.34,  0.008, 0.0,   "S"),
+    "Paraguay":      ("PY", "BPU",                      0.3, 16000, 0.10,  0.004, 0.0,   "S"),
+    "Uruguay":       ("UY", "BPU",                      0.35, 33000, 0.25, 0.004, 0.0,   "S"),
+}
+CITIES = {
+    "United States": [("Houston", "HOU"), ("Chicago", "CHI"), ("Los Angeles", "LAX"), ("New York", "NYC"),
+                      ("Atlanta", "ATL"), ("Denver", "DEN"), ("Seattle", "SEA")],
+    "Canada": [("Toronto", "TOR"), ("Montreal", "MTL"), ("Calgary", "CAL"), ("Vancouver", "VAN")],
+    "Mexico": [("Mexico City", "MEX"), ("Monterrey", "MTY"), ("Guadalajara", "GDL"), ("Queretaro", "QRO")],
+    "Colombia": [("Bogota", "BOG"), ("Medellin", "MDE"), ("Barranquilla", "BAQ")],
+    "Peru": [("Lima", "LIM"), ("Arequipa", "AQP")],
+    "Ecuador": [("Quito", "UIO"), ("Guayaquil", "GYE")],
+    "Argentina": [("Buenos Aires", "BUE"), ("Cordoba", "COR"), ("Neuquen", "NQN")],
+    "Chile": [("Santiago", "SCL"), ("Antofagasta", "ANF"), ("Concepcion", "CCP")],
+    "Brazil": [("Sao Paulo", "SAO"), ("Rio de Janeiro", "RIO"), ("Belo Horizonte", "BHZ"), ("Curitiba", "CWB")],
+    "Paraguay": [("Asuncion", "ASU")],
+    "Uruguay": [("Montevideo", "MVD")],
+}
+PRODUCT_LINES = {
+    "Buildings & Infrastructure":     {"code": "BNI", "short": "B&I", "type": "infrastructure", "growth": 0.05, "scale": 1.2},
+    "Industry & Energy":              {"code": "IND", "short": "Industry", "type": "industry", "growth": 0.04, "scale": 1.3},
+    "Power & Utilities":              {"code": "PWR", "short": "Power", "type": "industry", "growth": 0.06, "scale": 0.9},
+    "Elevators & Pressure Vessels":   {"code": "EPV", "short": "Elevators & PV", "type": "inspection", "growth": 0.03, "scale": 0.8},
+    "Environmental Lab Testing":      {"code": "ENV", "short": "Env Lab", "type": "laboratory", "growth": 0.06, "scale": 0.9},
+    "Consumer Products":              {"code": "CPS", "short": "Consumer Products", "type": "laboratory", "growth": 0.05, "scale": 0.8},
+    "Certification & Sustainability": {"code": "CER", "short": "Certification", "type": "certification", "growth": 0.08, "scale": 0.5},
+    "Metals & Minerals":              {"code": "MMI", "short": "M&M", "type": "laboratory", "growth": 0.05, "scale": 1.0},
+}
+COUNTRY_PLS = {
+    "United States": ["Buildings & Infrastructure", "Industry & Energy", "Power & Utilities",
+                      "Elevators & Pressure Vessels", "Environmental Lab Testing", "Consumer Products",
+                      "Certification & Sustainability"],
+    "Canada": ["Buildings & Infrastructure", "Industry & Energy", "Power & Utilities", "Environmental Lab Testing",
+               "Metals & Minerals", "Certification & Sustainability"],
+    "Mexico": ["Buildings & Infrastructure", "Industry & Energy", "Consumer Products", "Elevators & Pressure Vessels",
+               "Metals & Minerals", "Certification & Sustainability"],
+    "Colombia": ["Buildings & Infrastructure", "Industry & Energy", "Certification & Sustainability",
+                 "Environmental Lab Testing"],
+    "Peru": ["Metals & Minerals", "Buildings & Infrastructure", "Industry & Energy"],
+    "Ecuador": ["Industry & Energy", "Buildings & Infrastructure"],
+    "Argentina": ["Industry & Energy", "Buildings & Infrastructure", "Elevators & Pressure Vessels",
+                  "Environmental Lab Testing"],
+    "Chile": ["Metals & Minerals", "Industry & Energy", "Environmental Lab Testing", "Buildings & Infrastructure"],
+    "Brazil": ["Buildings & Infrastructure", "Industry & Energy", "Environmental Lab Testing",
+               "Elevators & Pressure Vessels", "Metals & Minerals", "Certification & Sustainability",
+               "Power & Utilities"],
+    "Paraguay": ["Buildings & Infrastructure", "Certification & Sustainability"],
+    "Uruguay": ["Buildings & Infrastructure", "Environmental Lab Testing", "Certification & Sustainability"],
+}
+REGION_ORDER = ["US & Canada", "Mexico", "Northern South America", "Southern South America", "BPU"]
+STORY = {"a": ("United States", "Elevators & Pressure Vessels"), "b": ("Brazil", "Environmental Lab Testing"),
+         "c": ("Mexico", "Buildings & Infrastructure"), "d": ("Chile", "Metals & Minerals"),
+         "e": ("Canada", "Power & Utilities")}
+
+# Cost profiles as share of production by business type (centre values; BUs vary around them)
+COST_PROFILES = {
+    "inspection":     {"personnel": 0.600, "share_7a": 0.80, "subc": 0.065, "other": 0.130, "functional": 0.105},
+    "infrastructure": {"personnel": 0.500, "share_7a": 0.78, "subc": 0.180, "other": 0.120, "functional": 0.105},
+    "industry":       {"personnel": 0.550, "share_7a": 0.80, "subc": 0.110, "other": 0.140, "functional": 0.105},
+    "laboratory":     {"personnel": 0.460, "share_7a": 0.75, "subc": 0.040, "other": 0.300, "functional": 0.105},
+    "certification":  {"personnel": 0.500, "share_7a": 0.72, "subc": 0.090, "other": 0.080, "functional": 0.110},
+}
+OTHER_MIX = {
+    "inspection":     {"9.1": 0.16, "9.2": 0.18, "9.3": 0.15, "9.4": 0.16, "9.5": 0.15, "9.6": 0.10, "9.7": 0.02, "9.8": 0.03, "9.9": 0.05},
+    "infrastructure": {"9.1": 0.24, "9.2": 0.12, "9.3": 0.14, "9.4": 0.16, "9.5": 0.14, "9.6": 0.08, "9.7": 0.03, "9.8": 0.04, "9.9": 0.05},
+    "industry":       {"9.1": 0.20, "9.2": 0.10, "9.3": 0.12, "9.4": 0.24, "9.5": 0.13, "9.6": 0.08, "9.7": 0.03, "9.8": 0.04, "9.9": 0.06},
+    "laboratory":     {"9.1": 0.06, "9.2": 0.15, "9.3": 0.24, "9.4": 0.04, "9.5": 0.03, "9.6": 0.07, "9.7": 0.21, "9.8": 0.03, "9.9": 0.17},
+    "certification":  {"9.1": 0.18, "9.2": 0.20, "9.3": 0.08, "9.4": 0.24, "9.5": 0.05, "9.6": 0.14, "9.7": 0.01, "9.8": 0.04, "9.9": 0.06},
+}
+VARIABLE_OTHER = {"9.1", "9.4", "9.5", "9.7", "9.9"}
+
+# Seasonality. North (US, Canada, Mexico): March peak, August + December dips.
+# South America: January/February summer + carnival dips, July winter break, December dip.
+SEASON = {
+    "N": np.array([0.93, 0.98, 1.10, 1.01, 1.03, 1.05, 0.99, 0.80, 1.05, 1.08, 1.06, 0.92]),
+    "S": np.array([0.84, 0.88, 1.08, 1.06, 1.06, 1.04, 0.95, 1.03, 1.04, 1.06, 1.05, 0.91]),
+}
+SEASON = {k: v / v.mean() for k, v in SEASON.items()}
+AVAIL_SEASON = {
+    "N": np.array([0.97, 1.0, 1.02, 1.0, 1.0, 1.0, 0.95, 0.90, 1.0, 1.02, 1.0, 0.86]),
+    "S": np.array([0.86, 0.90, 1.02, 1.0, 1.0, 1.0, 0.93, 1.0, 1.0, 1.02, 1.0, 0.90]),
+}
+OT_SEASON = np.array([0.9, 0.95, 1.2, 1.0, 1.0, 1.05, 0.9, 0.8, 1.05, 1.2, 1.15, 0.8])
+PERS_SEASON = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.01, 1.0, 0.99, 1.0, 1.0, 1.0, 1.02])
+PERS_SEASON = PERS_SEASON / PERS_SEASON.mean()
+WIP_PROFILE = np.array([0.035, 0.030, 0.020, 0.025, 0.020, 0.015, 0.020, 0.030, 0.010, -0.010, -0.020])
+# Unearned income (UI): annual fees billed in advance in January, released through the year
+UI_PROFILE = np.array([-0.050, 0.006, 0.006, 0.005, 0.005, 0.005, 0.004, 0.004, 0.004, 0.004, 0.004, 0.003])
+
+# --------------------------------------------------------------------------------------
+# Chart of accounts (AD50). Lines 14-16 are not used in the management view (customer numbering).
+# (account_id, line_no, l1_name, l2_code, l2_name, l3_code, l3_name, is_leaf, is_subtotal,
+#  natural_sign, display_order, favorable_direction)
+# --------------------------------------------------------------------------------------
+ACCOUNTS = [
+    (100, 1, "Billing", "1", "Billing", "1", "Billing", 0, 0, 1, 100, "up"),
+    (101, 1, "Billing", "1", "Billing", "1.1", "External billing", 1, 0, 1, 101, "up"),
+    (102, 1, "Billing", "1", "Billing", "1.2", "Credit notes", 1, 0, 1, 102, "up"),
+    (200, 2, "WIP & UI", "2", "WIP & UI", "2", "WIP & UI", 0, 0, 1, 200, "up"),
+    (201, 2, "WIP & UI", "2", "WIP & UI", "2.1", "WIP change", 1, 0, 1, 201, "up"),
+    (202, 2, "WIP & UI", "2", "WIP & UI", "2.2", "Unearned income change", 1, 0, 1, 202, "up"),
+    (300, 3, "Revenue", "3", "Revenue", "3", "Revenue", 0, 1, 1, 300, "up"),
+    (400, 4, "Intragroup revenue", "4", "Intragroup revenue", "4", "Intragroup revenue", 0, 0, 1, 400, "up"),
+    (401, 4, "Intragroup revenue", "4", "Intragroup revenue", "4.1", "Intragroup revenue", 1, 0, 1, 401, "up"),
+    (500, 5, "Intragroup subcontracting", "5", "Intragroup subcontracting", "5", "Intragroup subcontracting", 0, 0, -1, 500, "down"),
+    (501, 5, "Intragroup subcontracting", "5", "Intragroup subcontracting", "5.1", "Intragroup subcontracting", 1, 0, -1, 501, "down"),
+    (600, 6, "Production", "6", "Production", "6", "Production", 0, 1, 1, 600, "up"),
+    (700, 7, "Personnel charges", "7", "Personnel charges", "7", "Personnel charges", 0, 0, -1, 700, "down"),
+    (710, 7, "Personnel charges", "7A", "Direct (production) employees", "7A", "Direct (production) employees", 0, 0, -1, 710, "down"),
+    (711, 7, "Personnel charges", "7A", "Direct (production) employees", "7A1", "Guaranteed salary", 1, 0, -1, 711, "down"),
+    (712, 7, "Personnel charges", "7A", "Direct (production) employees", "7A2", "Bonus", 1, 0, -1, 712, "down"),
+    (713, 7, "Personnel charges", "7A", "Direct (production) employees", "7A3", "Variable / overtime", 1, 0, -1, 713, "down"),
+    (714, 7, "Personnel charges", "7A", "Direct (production) employees", "7A4", "Social security", 1, 0, -1, 714, "down"),
+    (715, 7, "Personnel charges", "7A", "Direct (production) employees", "7A5", "Pension", 1, 0, -1, 715, "down"),
+    (716, 7, "Personnel charges", "7A", "Direct (production) employees", "7A6", "Other personnel", 1, 0, -1, 716, "down"),
+    (720, 7, "Personnel charges", "7B", "Non-production employees", "7B", "Non-production employees", 0, 0, -1, 720, "down"),
+    (721, 7, "Personnel charges", "7B", "Non-production employees", "7B1", "Salary", 1, 0, -1, 721, "down"),
+    (722, 7, "Personnel charges", "7B", "Non-production employees", "7B2", "Bonus", 1, 0, -1, 722, "down"),
+    (723, 7, "Personnel charges", "7B", "Non-production employees", "7B3", "Social security", 1, 0, -1, 723, "down"),
+    (724, 7, "Personnel charges", "7B", "Non-production employees", "7B4", "Other", 1, 0, -1, 724, "down"),
+    (800, 8, "External subcontracting", "8", "External subcontracting", "8", "External subcontracting", 0, 0, -1, 800, "down"),
+    (801, 8, "External subcontracting", "8", "External subcontracting", "8.1", "External subcontractors", 1, 0, -1, 801, "down"),
+    (802, 8, "External subcontracting", "8", "External subcontracting", "8.2", "Temporary staff", 1, 0, -1, 802, "down"),
+    (900, 9, "Other costs", "9", "Other costs", "9", "Other costs", 0, 0, -1, 900, "down"),
+    (901, 9, "Other costs", "9", "Other costs", "9.1", "Contract expenses", 1, 0, -1, 901, "down"),
+    (902, 9, "Other costs", "9", "Other costs", "9.2", "Rent & utilities", 1, 0, -1, 902, "down"),
+    (903, 9, "Other costs", "9", "Other costs", "9.3", "Depreciation", 1, 0, -1, 903, "down"),
+    (904, 9, "Other costs", "9", "Other costs", "9.4", "Travel & living", 1, 0, -1, 904, "down"),
+    (905, 9, "Other costs", "9", "Other costs", "9.5", "Vehicles", 1, 0, -1, 905, "down"),
+    (906, 9, "Other costs", "9", "Other costs", "9.6", "IT & telecom", 1, 0, -1, 906, "down"),
+    (907, 9, "Other costs", "9", "Other costs", "9.7", "Lab consumables", 1, 0, -1, 907, "down"),
+    (908, 9, "Other costs", "9", "Other costs", "9.8", "Insurance", 1, 0, -1, 908, "down"),
+    (909, 9, "Other costs", "9", "Other costs", "9.9", "Other", 1, 0, -1, 909, "down"),
+    (1000, 10, "Functional neutralization", "10", "Functional neutralization", "10", "Functional neutralization", 0, 0, 1, 1000, "up"),
+    (1001, 10, "Functional neutralization", "10", "Functional neutralization", "10.1", "Functional neutralization", 1, 0, 1, 1001, "up"),
+    (1100, 11, "Gross profit", "11", "Gross profit", "11", "Gross profit", 0, 1, 1, 1100, "up"),
+    (1200, 12, "Total functional costs", "12", "Total functional costs", "12", "Total functional costs", 0, 0, -1, 1200, "down"),
+    (1201, 12, "Total functional costs", "12", "Total functional costs", "12.1", "Country functions", 1, 0, -1, 1201, "down"),
+    (1202, 12, "Total functional costs", "12", "Total functional costs", "12.2", "Region functions", 1, 0, -1, 1202, "down"),
+    (1203, 12, "Total functional costs", "12", "Total functional costs", "12.3", "HQ allocation", 1, 0, -1, 1203, "down"),
+    (1300, 13, "MAOP", "13", "MAOP", "13", "MAOP", 0, 1, 1, 1300, "up"),
+    (1700, 17, "Other operating expenses", "17", "Other operating expenses", "17", "Other operating expenses", 0, 0, -1, 1700, "down"),
+    (1701, 17, "Other operating expenses", "17", "Other operating expenses", "17.1", "Restructuring", 1, 0, -1, 1701, "down"),
+    (1702, 17, "Other operating expenses", "17", "Other operating expenses", "17.2", "Amortisation of acquired intangibles", 1, 0, -1, 1702, "down"),
+    (1703, 17, "Other operating expenses", "17", "Other operating expenses", "17.3", "Other non-recurring", 1, 0, -1, 1703, "down"),
+    (1800, 18, "Management OP", "18", "Management OP", "18", "Management OP", 0, 1, 1, 1800, "up"),
+    (1900, 19, "Financial result", "19", "Financial result", "19", "Financial result", 0, 0, 1, 1900, "up"),
+    (1901, 19, "Financial result", "19", "Financial result", "19.1", "Net interest", 1, 0, 1, 1901, "up"),
+    (1902, 19, "Financial result", "19", "Financial result", "19.2", "FX result", 1, 0, 1, 1902, "up"),
+    (2000, 20, "Corporate taxes", "20", "Corporate taxes", "20", "Corporate taxes", 0, 0, -1, 2000, "down"),
+    (2001, 20, "Corporate taxes", "20", "Corporate taxes", "20.1", "Corporate taxes", 1, 0, -1, 2001, "down"),
+    (2100, 21, "Net income", "21", "Net income", "21", "Net income", 0, 1, 1, 2100, "up"),
+]
+LEAVES = [a for a in ACCOUNTS if a[7] == 1]
+LEAF_CODES = [a[5] for a in LEAVES]
+LEAF_ID = {a[5]: a[0] for a in LEAVES}
+LEAF_LINE = {a[5]: a[1] for a in LEAVES}
+REVENUE_SIDE = {"1.1", "1.2", "2.1", "2.2", "4.1", "5.1"}
+NON_OPERATING = {"19.1", "19.2", "20.1"}
+COST_LEAVES = [c for c in LEAF_CODES if c not in REVENUE_SIDE | NON_OPERATING]
+VARIABLE_COSTS = {"7A3", "8.1", "8.2"} | VARIABLE_OTHER
+STAT_KEYS = ("fte", "headcount", "direct_fte", "billable_hours", "available_hours", "overtime_hours")
+
+VERSIONS = [(1, "Actual", 12, 0), (2, "Budget", 0, 0)]
+_fc = CFG["forecasts"]
+for _i, _name in enumerate(sorted(_fc), start=3):
+    VERSIONS.append((_i, _name, int(_fc[_name]["actual_months"]), 1))
+FC_ACCURACY = {k: float(v) for k, v in CFG["forecast_accuracy"].items()}
+
+USERS = [
+    ("group_cfo", "Group CFO", "Group CFO", "l1_group", CFG["company"]),
+    ("us_country_head", "United States Country Head", "Country Head", "l3_country", "United States"),
+    ("env_pl_leader", "Environmental Lab Testing PL Leader", "Product Line Leader",
+     "l4_product_line", "Environmental Lab Testing"),
+]
+
+
+def t_index(year: int, month: int) -> int:
+    return (year - SIM_START) * 12 + (month - 1)
+
+
+def close_date(year: int, month: int) -> date:
+    return date(year + (month == 12), month % 12 + 1, CLOSE_DAY)
+
+
+def last_closed_month(as_of: date) -> tuple[int, int]:
+    y, m = as_of.year, as_of.month
+    for _ in range(36):
+        y2, m2 = (y, m - 1) if m > 1 else (y - 1, 12)
+        if close_date(y2, m2) <= as_of:
+            return y2, m2
+        y, m = y2, m2
+    raise ValueError("no closed month found")
+
+
+@dataclass
+class BU:
+    bu_id: int
+    bu_name: str
+    business: str
+    pl: str
+    country: str
+    region: str
+    city: str
+    base: float
+    growth: float
+    noise: float
+    pers_off: float
+    subc_off: float
+    other_off: float
+    r_igr: float
+    r_igs: float
+    cn_ratio: float
+    util: float
+    ot: float
+    hc_ratio: float
+    amort: float
+
+    @property
+    def btype(self) -> str:
+        return PRODUCT_LINES[self.pl]["type"]
+
+    @property
+    def hemi(self) -> str:
+        return COUNTRIES[self.country][7]
+
+
+# --------------------------------------------------------------------------------------
+# Organisation
+# --------------------------------------------------------------------------------------
+def build_org(seed: int) -> list[BU]:
+    target = int(CFG["target_bu_count"])
+    plan = []
+    for attempt in range(500):
+        rng = np.random.default_rng(seed + attempt)
+        plan = []
+        for country in sorted(COUNTRIES, key=lambda c: (REGION_ORDER.index(COUNTRIES[c][1]), c)):
+            for pl in COUNTRY_PLS[country]:
+                n_bus = min(int(rng.choice([1, 2, 3], p=[0.55, 0.30, 0.15])), len(CITIES[country]))
+                for ci in sorted(rng.choice(len(CITIES[country]), size=n_bus, replace=False)):
+                    n_units = int(rng.choice([1, 2, 3, 4], p=[0.55, 0.28, 0.11, 0.06]))
+                    plan.append((country, pl, CITIES[country][ci], n_units))
+        if abs(sum(p[-1] for p in plan) - target) <= 4:
+            break
+    rng = np.random.default_rng(seed + 1000)
+    bus: list[BU] = []
+    for country, pl, (city, ccode), n_units in plan:
+        code, region, cscale = COUNTRIES[country][0], COUNTRIES[country][1], COUNTRIES[country][2]
+        meta = PRODUCT_LINES[pl]
+        for k in range(1, n_units + 1):
+            story = (country, pl) in STORY.values()
+            spread = 0.4 if story else 1.0
+            subc_sd = 0.03 if meta["type"] in ("infrastructure", "industry") else 0.012
+            bus.append(BU(
+                bu_id=len(bus) + 1, bu_name=f"{code}-{meta['code']}-{ccode}-{k:02d}",
+                business=f"{meta['short']} {city}", pl=pl, country=country, region=region, city=city,
+                base=8.0e6 * cscale * meta["scale"] * float(rng.lognormal(0, 0.45)),
+                growth=meta["growth"] + float(rng.normal(0, 0.012)),
+                noise=float(rng.uniform(0.025, 0.045)),
+                pers_off=float(rng.normal(0, 0.018)) * spread,
+                subc_off=float(rng.normal(0, subc_sd)) * spread,
+                other_off=float(rng.normal(0, 0.010)) * spread,
+                r_igr=float(rng.uniform(0.02, 0.06)), r_igs=float(rng.uniform(0.02, 0.06)),
+                cn_ratio=float(rng.uniform(0.008, 0.02)),
+                util=float(rng.uniform(0.78, 0.86)), ot=float(rng.uniform(0.07, 0.12)),
+                hc_ratio=float(rng.uniform(1.04, 1.09)),
+                amort=float(rng.uniform(0.005, 0.015)) if rng.random() < 0.35 else 0.0,
+            ))
+    return bus
+
+
+# --------------------------------------------------------------------------------------
+# Simulation of the "true" monthly P&L per BU (signed leaf amounts)
+# --------------------------------------------------------------------------------------
+def simulate_bu(rng: np.random.Generator, bu: BU):
+    n = N_SIM
+    t = np.arange(n)
+    m = t % 12
+    yi = t // 12
+    prof = COST_PROFILES[bu.btype]
+    season = SEASON[bu.hemi]
+    _, _, _, cpf, tax_rate, fx_vol, fx_bias, _ = COUNTRIES[bu.country]
+
+    trend = bu.base / 12.0 * (1 + bu.growth) ** (t / 12.0)
+    prod = trend * season[m] * (1 + rng.normal(0, bu.noise, n))
+    pers_factor = np.ones(n)
+    pers_adj = np.zeros(n)
+    other_adj = np.zeros(n)
+    restructuring_extra = np.zeros(n)
+
+    # Story (b): Brazil Environmental Lab Testing loses a large contract from Feb 2026:
+    # production -20% immediately, personnel adjusts only from May 2026 (3-month lag), with a
+    # one-off restructuring (severance) charge in May 2026.
+    if (bu.country, bu.pl) == STORY["b"]:
+        prod = np.where(t >= t_index(2026, 2), prod * 0.80, prod)
+        pers_factor = np.where(t >= t_index(2026, 5), 0.84, 1.0)
+        restructuring_extra[t_index(2026, 5)] = trend[t_index(2026, 5)] * prof["personnel"] * 0.16 * 3
+
+    # Story (e): Canada Power & Utilities - steady margin improvement 2022-2026.
+    if (bu.country, bu.pl) == STORY["e"]:
+        years_since = (t - t_index(FIRST_YEAR, 1)) / 12.0
+        pers_adj = 0.035 - 0.012 * years_since
+        other_adj = 0.008 - 0.003 * years_since
+
+    prod_ratio = prod / (trend * season[m])
+    leaves: dict[str, np.ndarray] = {}
+
+    # Revenue side: production -> intragroup -> revenue -> WIP & UI -> billing ------------
+    igr = prod * bu.r_igr * (1 + rng.normal(0, 0.03, n))
+    igs = -prod * bu.r_igs * (1 + rng.normal(0, 0.03, n))
+    rev = prod - igr - igs
+    wip = np.zeros(n)
+    for y in range(n // 12):
+        s = y * 12
+        wip[s:s + 11] = rev[s:s + 11] * (WIP_PROFILE + rng.normal(0, 0.008, 11))
+        wip[s + 11] = -0.85 * wip[s:s + 11].sum() * (1 + rng.normal(0, 0.05))
+    ui_amp = 3.0 if bu.btype == "certification" else 1.0
+    ui = rev * UI_PROFILE[m] * ui_amp * (1 + rng.normal(0, 0.10, n))
+    billing = rev - wip - ui
+    credit = -billing * bu.cn_ratio * (1 + rng.normal(0, 0.10, n))
+    leaves["1.1"], leaves["1.2"] = billing - credit, credit
+    leaves["2.1"], leaves["2.2"] = wip, ui
+    leaves["4.1"], leaves["5.1"] = igr, igs
+
+    # Personnel charges (7) - smooth, follows the trend not monthly production ------------
+    pr = prof["personnel"] + bu.pers_off + pers_adj
+    pers_total = trend * pr * pers_factor * PERS_SEASON[m] * (1 + rng.normal(0, 0.01, n))
+    p7a = pers_total * prof["share_7a"]
+    p7b = pers_total - p7a
+    trueup_a = rng.normal(0.6, 0.2, n // 12)
+    trueup_b = rng.normal(0.4, 0.15, n // 12)
+    bonus_a = np.where(m == 2, 1 + trueup_a[yi], 1.0)
+    bonus_b = np.where(m == 2, 1 + trueup_b[yi], 1.0)
+    leaves["7A1"] = -p7a * 0.65
+    leaves["7A2"] = -p7a * 0.08 * bonus_a
+    leaves["7A3"] = -p7a * 0.05 * season[m] * prod_ratio
+    leaves["7A4"] = -p7a * 0.15 * (1 + rng.normal(0, 0.01, n))
+    leaves["7A5"] = -p7a * 0.05 * (1 + rng.normal(0, 0.01, n))
+    leaves["7A6"] = -p7a * 0.02 * (1 + rng.normal(0, 0.08, n))
+    leaves["7B1"] = -p7b * 0.70
+    leaves["7B2"] = -p7b * 0.08 * bonus_b
+    leaves["7B3"] = -p7b * 0.17 * (1 + rng.normal(0, 0.01, n))
+    leaves["7B4"] = -p7b * 0.05 * (1 + rng.normal(0, 0.08, n))
+
+    # External subcontracting (8) -----------------------------------------------------------
+    sr = max(prof["subc"] + bu.subc_off, 0.015)
+    subc = prod * sr * (1 + rng.normal(0, 0.06, n))
+    ext = subc * 0.70 * (1 + rng.normal(0, 0.03, n))
+    leaves["8.1"], leaves["8.2"] = -ext, -(subc - ext)
+
+    # Other costs (9) -----------------------------------------------------------------------
+    orat = prof["other"] + bu.other_off + other_adj
+    for code, share in OTHER_MIX[bu.btype].items():
+        if code in VARIABLE_OTHER:
+            leaves[code] = -prod * orat * share * (1 + rng.normal(0, 0.06, n))
+        else:
+            leaves[code] = -trend * orat * share * (1 + rng.normal(0, 0.01, n))
+
+    # Functional neutralization (10) and total functional costs (12) -----------------------
+    fr = prof["functional"]
+    yearly_trend = np.repeat(trend.reshape(-1, 12).mean(axis=1), 12)
+    leaves["10.1"] = trend * 0.025 * (1 + rng.normal(0, 0.02, n))
+    leaves["12.1"] = -trend * fr * 0.43 * (1 + rng.normal(0, 0.01, n))
+    leaves["12.2"] = -trend * fr * 0.24 * (1 + rng.normal(0, 0.01, n))
+    leaves["12.3"] = -yearly_trend * fr * 0.33
+
+    # Other operating expenses (17): lumpy restructuring, PPA amortisation, small other ------
+    events = rng.random(n) < 0.03
+    leaves["17.1"] = -(np.where(events, trend * rng.uniform(0.02, 0.08, n), 0.0) + restructuring_extra)
+    leaves["17.2"] = -yearly_trend * bu.amort
+    leaves["17.3"] = -trend * np.abs(rng.normal(0, 0.002, n))
+
+    # Financial result (19): net interest + FX result (country FX volatility; USD = 0) -----
+    leaves["19.1"] = -trend * 0.006 * (1 + rng.normal(0, 0.05, n))
+    leaves["19.2"] = trend * (fx_bias + rng.normal(0, fx_vol, n)) if fx_vol > 0 else np.zeros(n)
+
+    # Statistics -------------------------------------------------------------------------------
+    cost_per_fte = cpf * 1.03 ** (t / 12.0)
+    fte = trend * pr * pers_factor * 12.0 / cost_per_fte * (1 + rng.normal(0, 0.004, n))
+    direct_fte = fte * prof["share_7a"]
+    avail = direct_fte * AVAIL_HOURS * AVAIL_SEASON[bu.hemi][m] * (1 + rng.normal(0, 0.01, n))
+    util = np.clip(bu.util * prod_ratio ** 0.8 / pers_factor ** 0.8 * (1 + rng.normal(0, 0.012, n)), 0.45, 0.97)
+    stats = {"fte": fte, "headcount": fte * bu.hc_ratio, "direct_fte": direct_fte,
+             "available_hours": avail, "billable_hours": avail * util,
+             "overtime_hours": avail * bu.ot * OT_SEASON[m] * np.clip(prod_ratio, 0.5, 1.5) ** 1.5}
+    return leaves, prod, stats
+
+
+def add_taxes(leaves: dict[str, np.ndarray], tax_rates: np.ndarray) -> None:
+    """Corporate taxes (20.1) = -rate x pre-tax result (lines 1..19), per BU-month."""
+    pre_tax = sum(leaves[c] for c in LEAF_CODES if c != "20.1")
+    leaves["20.1"] = -pre_tax * tax_rates[:, None]
+
+
+# --------------------------------------------------------------------------------------
+# Budget: prior-year actual x (1 + target growth), slight optimism bias
+# --------------------------------------------------------------------------------------
+def build_budget(bus, truth, prod, stats):
+    nb = len(bus)
+    bud = {c: np.zeros((nb, N_OUT)) for c in LEAF_CODES}
+    bud_prod = np.zeros((nb, N_OUT))
+    bud_stats = {k: np.zeros((nb, N_OUT)) for k in STAT_KEYS}
+    flat = np.full(12, 1 / 12)
+    for yo, year in enumerate(range(FIRST_YEAR, LAST_YEAR + 1)):
+        py = slice(t_index(year - 1, 1), t_index(year - 1, 1) + 12)
+        out = slice(yo * 12, yo * 12 + 12)
+        for b, bu in enumerate(bus):
+            seas = SEASON[bu.hemi] / 12
+            g = PRODUCT_LINES[bu.pl]["growth"]
+            p_py = prod[b, py].sum()
+            bp = p_py * (1 + g + 0.015) * seas
+            igr = bp * truth["4.1"][b, py].sum() / p_py
+            igs = bp * truth["5.1"][b, py].sum() / p_py
+            br = bp - igr - igs
+            bw = np.zeros(12)
+            bw[:11] = br[:11] * WIP_PROFILE
+            bw[11] = -0.85 * bw[:11].sum()
+            bui = br * UI_PROFILE * (3.0 if bu.btype == "certification" else 1.0)
+            bbill = br - bw - bui
+            bill_py = truth["1.1"][b, py].sum() + truth["1.2"][b, py].sum()
+            cn = -truth["1.2"][b, py].sum() / bill_py
+            credit = -bbill * cn
+            bud["1.1"][b, out], bud["1.2"][b, out] = bbill - credit, credit
+            bud["2.1"][b, out], bud["2.2"][b, out] = bw, bui
+            bud["4.1"][b, out], bud["5.1"][b, out] = igr, igs
+            cost_growth = 1 + 0.92 * (g + 0.015)
+            for code in COST_LEAVES:
+                profile = seas if code in VARIABLE_COSTS else flat
+                total = truth[code][b, py].sum()
+                if code == "17.1":
+                    total = -p_py * 0.003          # restructuring: small provision only
+                elif code == "17.3":
+                    total = 0.0
+                bud[code][b, out] = total * cost_growth * profile
+            bud["19.1"][b, out] = truth["19.1"][b, py].sum() * (1 + g) * flat
+            bud["19.2"][b, out] = 0.0                   # FX result is not budgeted
+            bud_prod[b, out] = bp
+            fte_py = stats["fte"][b, py]
+            fte_b = fte_py.mean() * (1 + g * 0.5)
+            ratio = lambda k: stats[k][b, py].sum() / fte_py.sum()  # noqa: E731
+            avail_b = fte_b * ratio("available_hours") * 12 * AVAIL_SEASON[bu.hemi] / AVAIL_SEASON[bu.hemi].sum()
+            util_py = stats["billable_hours"][b, py].sum() / stats["available_hours"][b, py].sum()
+            ot_py = stats["overtime_hours"][b, py].sum() / stats["available_hours"][b, py].sum()
+            bud_stats["fte"][b, out] = fte_b
+            bud_stats["headcount"][b, out] = fte_b * ratio("headcount")
+            bud_stats["direct_fte"][b, out] = fte_b * ratio("direct_fte")
+            bud_stats["available_hours"][b, out] = avail_b
+            bud_stats["billable_hours"][b, out] = avail_b * util_py
+            bud_stats["overtime_hours"][b, out] = avail_b * ot_py * OT_SEASON / OT_SEASON.mean()
+    return bud, bud_prod, bud_stats
+
+
+def main() -> None:
+    seed = int(CFG["seed"])
+    DATA.mkdir(parents=True, exist_ok=True)
+    bus = build_org(seed)
+    nb = len(bus)
+    rng = np.random.default_rng(seed)
+    tax_rates = np.array([COUNTRIES[bu.country][4] for bu in bus])
+
+    truth = {c: np.zeros((nb, N_SIM)) for c in LEAF_CODES}
+    prod = np.zeros((nb, N_SIM))
+    stats = {k: np.zeros((nb, N_SIM)) for k in STAT_KEYS}
+    for b, bu in enumerate(bus):
+        leaves, p, st = simulate_bu(rng, bu)
+        for c in LEAF_CODES:
+            if c in leaves:
+                truth[c][b] = leaves[c]
+        prod[b] = p
+        for k in STAT_KEYS:
+            stats[k][b] = st[k]
+    add_taxes(truth, tax_rates)
+
+    bud, bud_prod, bud_stats = build_budget(bus, truth, prod, stats)
+    add_taxes(bud, tax_rates)
+
+    def sel(key):
+        country, pl = STORY[key]
+        return [b for b, bu in enumerate(bus) if bu.country == country and bu.pl == pl]
+
+    # Story (a): United States Elevators & Pressure Vessels - 7A2 bonus spike March 2025, about 3x a
+    # normal March (normal March = monthly accrual x 1.6 average true-up; accrual = 8/65 of 7A1)
+    for b in sel("a"):
+        t25 = t_index(2025, 3)
+        normal_march = truth["7A1"][b, t25] * (0.08 / 0.65) * 1.6
+        truth["7A2"][b, t25] = 3.0 * normal_march
+    # Story (c): Mexico Buildings & Infrastructure - WIP build-up Jan-Jun 2026, reversal Jul-Sep
+    for b in sel("c"):
+        rev = sum(truth[c][b] for c in ("1.1", "1.2", "2.1", "2.2"))
+        s = t_index(2026, 1)
+        build = rev[s:s + 6] * (0.15 + rng.normal(0, 0.01, 6))
+        truth["2.1"][b, s:s + 6] = build
+        truth["2.1"][b, s + 6:s + 9] = -build.sum() * np.array([0.32, 0.33, 0.30])
+        new_bill = rev - truth["2.1"][b] - truth["2.2"][b]
+        ratio = -truth["1.2"][b] / (truth["1.1"][b] + truth["1.2"][b])
+        truth["1.2"][b] = -new_bill * ratio
+        truth["1.1"][b] = new_bill - truth["1.2"][b]
+    # Story (d): Chile Metals & Minerals - external subcontracting 2026 running +35% vs budget
+    off26 = (2026 - FIRST_YEAR) * 12
+    for b in sel("d"):
+        for code in ("8.1", "8.2"):
+            truth[code][b, t_index(2026, 1):t_index(2026, 1) + 12] = (
+                bud[code][b, off26:off26 + 12] * 1.35 * (1 + rng.normal(0, 0.03, 12)))
+    add_taxes(truth, tax_rates)                       # re-compute taxes after the stories
+
+    sim_out = slice(t_index(FIRST_YEAR, 1), t_index(FIRST_YEAR, 1) + N_OUT)
+    truth_out = {c: truth[c][:, sim_out] for c in LEAF_CODES}
+    stats_out = {k: stats[k][:, sim_out] for k in STAT_KEYS}
+    forecasts, fc_stats = {}, {}
+    for _vid, vname, k_act, is_fc in VERSIONS:
+        if not is_fc:
+            continue
+        a = FC_ACCURACY[vname]
+        fc = {}
+        for c in LEAF_CODES:
+            arr = truth_out[c].copy()
+            for yo in range(N_OUT // 12):
+                tail = slice(yo * 12 + k_act, yo * 12 + 12)
+                arr[:, tail] = (a * truth_out[c][:, tail] + (1 - a) * bud[c][:, tail]) * (
+                    1 + rng.normal(0, 0.01, arr[:, tail].shape))
+            fc[c] = arr
+        st = {}
+        for key in STAT_KEYS:
+            arr = stats_out[key].copy()
+            for yo in range(N_OUT // 12):
+                tail = slice(yo * 12 + k_act, yo * 12 + 12)
+                arr[:, tail] = a * stats_out[key][:, tail] + (1 - a) * bud_stats[key][:, tail]
+            st[key] = arr
+        forecasts[vname], fc_stats[vname] = fc, st
+
+    # ----------------------------------------------------------------------------------
+    # Tables
+    # ----------------------------------------------------------------------------------
+    month_keys = np.array([(FIRST_YEAR + i // 12) * 100 + i % 12 + 1 for i in range(N_OUT)])
+    ly, lm = last_closed_month(AS_OF)
+    last_closed_key = ly * 100 + lm
+    actual_mask = month_keys <= last_closed_key
+
+    dim_org = pd.DataFrame([{
+        "bu_id": bu.bu_id, "bu_name": bu.bu_name, "l6_bu": bu.bu_name, "l5_business": bu.business,
+        "l4_product_line": bu.pl, "l3_country": bu.country, "l2_region": bu.region,
+        "l1_group": CFG["company"], "business_type": bu.btype, "city": bu.city,
+        "valid_from": date(FIRST_YEAR, 1, 1), "valid_to": date(9999, 12, 31),
+    } for bu in bus])
+    dim_account = pd.DataFrame(ACCOUNTS, columns=[
+        "account_id", "line_no", "l1_name", "l2_code", "l2_name", "l3_code", "l3_name",
+        "is_leaf", "is_subtotal", "natural_sign", "display_order", "favorable_direction"])
+    dim_account["is_leaf"] = dim_account["is_leaf"].astype(bool)
+    dim_account["is_subtotal"] = dim_account["is_subtotal"].astype(bool)
+    dim_version = pd.DataFrame(VERSIONS, columns=["version_id", "name", "actual_months", "is_forecast"])
+    dim_version["is_forecast"] = dim_version["is_forecast"].astype(bool)
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    dim_period = pd.DataFrame([{
+        "month_key": int(k), "year": int(k // 100), "quarter": (int(k % 100) - 1) // 3 + 1,
+        "month": int(k % 100), "month_name": month_names[int(k % 100) - 1],
+        "close_date": close_date(int(k // 100), int(k % 100)),
+        "is_closed": close_date(int(k // 100), int(k % 100)) <= AS_OF,
+    } for k in month_keys])
+
+    bu_ids = np.array([bu.bu_id for bu in bus])
+    version_id = {v[1]: v[0] for v in VERSIONS}
+    fact_parts, stat_parts = [], []
+
+    def add(vname, arrays, stat_arrays, mask):
+        keys = month_keys[mask]
+        nm = len(keys)
+        for c in LEAF_CODES:
+            fact_parts.append(pd.DataFrame({
+                "month_key": np.tile(keys, nb), "bu_id": np.repeat(bu_ids, nm),
+                "account_id": LEAF_ID[c], "version_id": version_id[vname],
+                "amount_usd": np.round(arrays[c][:, mask].ravel(), 2)}))
+        part = {"month_key": np.tile(keys, nb), "bu_id": np.repeat(bu_ids, nm), "version_id": version_id[vname]}
+        for k in STAT_KEYS:
+            part[k] = np.round(stat_arrays[k][:, mask].ravel(), 2 if k in ("fte", "headcount", "direct_fte") else 1)
+        stat_parts.append(pd.DataFrame(part))
+
+    all_months = np.ones(N_OUT, dtype=bool)
+    add("Actual", truth_out, stats_out, actual_mask)
+    add("Budget", bud, bud_stats, all_months)
+    for vname in forecasts:
+        add(vname, forecasts[vname], fc_stats[vname], all_months)
+    fact_pnl = pd.concat(fact_parts, ignore_index=True)
+    fact_stats = pd.concat(stat_parts, ignore_index=True)
+
+    app_user = pd.DataFrame([(u[0], u[1], u[2]) for u in USERS], columns=["user_id", "display_name", "role"])
+    user_org_access = pd.DataFrame([(u[0], u[3], u[4]) for u in USERS], columns=["user_id", "org_level", "org_value"])
+
+    # Control totals: intended Production (independent variable) + subtotals from unrounded leaves
+    ctrl_parts = []
+
+    def ctrl(vname, arrays, prod_arr, mask):
+        keys = month_keys[mask]
+        line = {}
+        for ln in sorted(set(LEAF_LINE.values())):
+            line[ln] = sum(arrays[c][:, mask] for c in LEAF_CODES if LEAF_LINE[c] == ln)
+        revenue = line[1] + line[2]
+        production = prod_arr[:, mask] if prod_arr is not None else revenue + line[4] + line[5]
+        gross = production + line[7] + line[8] + line[9] + line[10]
+        maop = gross + line[12]
+        mop = maop + line[17]
+        net = mop + line[19] + line[20]
+        ctrl_parts.append(pd.DataFrame({
+            "month_key": np.tile(keys, nb), "bu_id": np.repeat(bu_ids, len(keys)),
+            "version_id": version_id[vname], "revenue": revenue.ravel(), "production": production.ravel(),
+            "gross_profit": gross.ravel(), "maop": maop.ravel(), "management_op": mop.ravel(),
+            "net_income": net.ravel()}))
+
+    ctrl("Actual", truth_out, prod[:, sim_out], actual_mask)
+    ctrl("Budget", bud, bud_prod, all_months)
+    for vname in forecasts:
+        ctrl(vname, forecasts[vname], None, all_months)
+    control = pd.concat(ctrl_parts, ignore_index=True)
+
+    tables = {"dim_org": dim_org, "dim_account": dim_account, "dim_version": dim_version,
+              "dim_period": dim_period, "fact_pnl": fact_pnl, "fact_stats": fact_stats,
+              "app_user": app_user, "user_org_access": user_org_access}
+    for name, df in tables.items():
+        df.to_parquet(DATA / f"{name}.parquet", index=False)
+    control.to_parquet(DATA / "control_totals.parquet", index=False)
+    stories = compute_stories(tables)
+    (DATA / "stories.json").write_text(json.dumps(stories, indent=2, default=str))
+
+    print(f"Generated {nb} BUs in {dim_org.l3_country.nunique()} countries / {dim_org.l2_region.nunique()} regions, "
+          f"last closed month {last_closed_key}")
+    for name, df in tables.items():
+        print(f"  {name:<16} {len(df):>9,} rows")
+    print("  fact_pnl rows per version:",
+          fact_pnl.groupby("version_id").size().rename(index={v[0]: v[1] for v in VERSIONS}).to_dict())
+
+
+# --------------------------------------------------------------------------------------
+# Story numbers (computed from the generated tables, exactly as stored)
+# --------------------------------------------------------------------------------------
+def compute_stories(t: dict[str, pd.DataFrame]) -> dict:
+    f = t["fact_pnl"].merge(t["dim_account"][["account_id", "line_no", "l3_code"]], on="account_id")
+    f = f.merge(t["dim_org"][["bu_id", "l3_country", "l4_product_line"]], on="bu_id")
+    f["version"] = f["version_id"].map(dict(zip(t["dim_version"].version_id, t["dim_version"].name)))
+    s = t["fact_stats"].merge(t["dim_org"][["bu_id", "l3_country", "l4_product_line"]], on="bu_id")
+    s["version"] = s["version_id"].map(dict(zip(t["dim_version"].version_id, t["dim_version"].name)))
+
+    def lines(df):
+        g = df.groupby("line_no")["amount_usd"].sum()
+        get = lambda k: float(g.get(k, 0.0))  # noqa: E731
+        rev = get(1) + get(2)
+        prod_ = rev + get(4) + get(5)
+        gross = prod_ + get(7) + get(8) + get(9) + get(10)
+        maop = gross + get(12)
+        mop = maop + get(17)
+        p7a = -float(df[df.l3_code.str.startswith("7A")]["amount_usd"].sum())
+        return {"billing": get(1), "wip_ui": get(2), "revenue": rev, "production": prod_,
+                "personnel": -get(7), "personnel_7a": p7a, "subcontracting": -get(8), "other": -get(9),
+                "functional_costs": -get(12), "gross_profit": gross, "maop": maop,
+                "other_opex": -get(17), "management_op": mop, "net_income": mop + get(19) + get(20)}
+
+    def slice_(story, version, k0, k1, frame=None):
+        frame = f if frame is None else frame
+        d = frame[(frame.version == version) & (frame.month_key >= k0) & (frame.month_key <= k1)]
+        if story:
+            country, pl = STORY[story]
+            d = d[(d.l3_country == country) & (d.l4_product_line == pl)]
+        return d
+
+    r = lambda x: round(float(x), 2)  # noqa: E731
+    out = {"stories": {k: f"{v[0]} · {v[1]}" for k, v in STORY.items()}}
+
+    d = slice_("a", "Actual", 202201, 202612)
+    bonus = -d[d.l3_code == "7A2"].groupby("month_key")["amount_usd"].sum()
+    others = bonus[(bonus.index >= 202501) & (bonus.index <= 202512) & (bonus.index != 202503)]
+    p7a = -d[d.l3_code.str.startswith("7A")].groupby("month_key")["amount_usd"].sum()
+    out["a"] = {"bonus_7A2_mar_2025": r(bonus.get(202503, 0)), "bonus_7A2_mar_2024": r(bonus.get(202403, 0)),
+                "bonus_7A2_avg_other_months_2025": r(others.mean()),
+                "ratio_vs_mar_2024": r(bonus.get(202503, 0) / bonus.get(202403, 1)),
+                "personnel_7A_mar_2025": r(p7a.get(202503, 0)), "personnel_7A_mar_2024": r(p7a.get(202403, 0))}
+
+    cy, py, bu = (lines(slice_("b", "Actual", 202601, 202610)), lines(slice_("b", "Actual", 202501, 202510)),
+                  lines(slice_("b", "Budget", 202601, 202610)))
+    monthly = {}
+    for k in range(202601, 202611):
+        x = lines(slice_("b", "Actual", k, k))
+        monthly[k] = {"production": r(x["production"]), "personnel": r(x["personnel"]), "maop": r(x["maop"]),
+                      "maop_margin_revenue_pct": r(100 * x["maop"] / x["revenue"])}
+    st_cy = slice_("b", "Actual", 202601, 202610, s)
+    st_py = slice_("b", "Actual", 202501, 202510, s)
+    restr = slice_("b", "Actual", 202605, 202605)
+    out["b"] = {"ytd_oct_2026": {k: r(v) for k, v in cy.items()}, "ytd_oct_2025": {k: r(v) for k, v in py.items()},
+                "budget_ytd_oct_2026": {k: r(v) for k, v in bu.items()},
+                "production_change_vs_py_pct": r(100 * (cy["production"] / py["production"] - 1)),
+                "production_change_vs_budget_pct": r(100 * (cy["production"] / bu["production"] - 1)),
+                "maop_margin_revenue_ytd_2026_pct": r(100 * cy["maop"] / cy["revenue"]),
+                "maop_margin_revenue_ytd_2025_pct": r(100 * py["maop"] / py["revenue"]),
+                "utilization_ytd_2026_pct": r(100 * st_cy.billable_hours.sum() / st_cy.available_hours.sum()),
+                "utilization_ytd_2025_pct": r(100 * st_py.billable_hours.sum() / st_py.available_hours.sum()),
+                "restructuring_may_2026": r(-restr[restr.l3_code == "17.1"].amount_usd.sum()),
+                "monthly_2026": monthly}
+
+    w = slice_("c", "Actual", 202501, 202610)
+    wip = w[w.l3_code == "2.1"].groupby("month_key")["amount_usd"].sum()
+    bill = w[w.line_no == 1].groupby("month_key")["amount_usd"].sum()
+    in26 = lambda ser, a, b: ser[(ser.index >= a) & (ser.index <= b)]  # noqa: E731
+    out["c"] = {"wip_change_by_month_2026": {int(k): r(v) for k, v in in26(wip, 202601, 202610).items()},
+                "billing_by_month_2026": {int(k): r(v) for k, v in in26(bill, 202601, 202610).items()},
+                "wip_build_jan_jun_2026": r(in26(wip, 202601, 202606).sum()),
+                "wip_reversal_jul_sep_2026": r(in26(wip, 202607, 202609).sum()),
+                "wip_ytd_oct_2026": r(in26(wip, 202601, 202610).sum()),
+                "wip_ytd_oct_2025": r(in26(wip, 202501, 202510).sum())}
+
+    a26, b26, a25 = (lines(slice_("d", "Actual", 202601, 202610)), lines(slice_("d", "Budget", 202601, 202610)),
+                     lines(slice_("d", "Actual", 202501, 202510)))
+    out["d"] = {"subcontracting_ytd_oct_2026_actual": r(a26["subcontracting"]),
+                "subcontracting_ytd_oct_2026_budget": r(b26["subcontracting"]),
+                "subcontracting_ytd_oct_2025_actual": r(a25["subcontracting"]),
+                "vs_budget_pct": r(100 * (a26["subcontracting"] / b26["subcontracting"] - 1)),
+                "vs_py_pct": r(100 * (a26["subcontracting"] / a25["subcontracting"] - 1)),
+                "subcontracting_pct_of_production_2026": r(100 * a26["subcontracting"] / a26["production"]),
+                "subcontracting_pct_of_production_2025": r(100 * a25["subcontracting"] / a25["production"]),
+                "maop_ytd_oct_2026_actual": r(a26["maop"]), "maop_ytd_oct_2026_budget": r(b26["maop"])}
+
+    marg, marg_fy = {}, {}
+    for y in range(FIRST_YEAR, LAST_YEAR + 1):
+        x = lines(slice_("e", "Actual", y * 100 + 1, y * 100 + 10))
+        marg[f"YTD Oct {y}"] = r(100 * x["maop"] / x["revenue"])
+        if y < LAST_YEAR:
+            x = lines(slice_("e", "Actual", y * 100 + 1, y * 100 + 12))
+            marg_fy[f"FY {y}"] = r(100 * x["maop"] / x["revenue"])
+    out["e"] = {"maop_margin_revenue_pct_ytd_oct": marg, "maop_margin_revenue_pct_fy": marg_fy}
+
+    g = lines(slice_(None, "Actual", 202501, 202512))
+    gs = slice_(None, "Actual", 202501, 202512, s)
+    out["group_fy2025"] = {k: r(v) for k, v in g.items()}
+    out["group_fy2025"].update({
+        "maop_margin_revenue_pct": r(100 * g["maop"] / g["revenue"]),
+        "direct_margin_pct": r(100 * (g["production"] - g["personnel_7a"]) / g["production"]),
+        "avg_fte": r(gs.groupby("month_key").fte.sum().mean()),
+        "avg_headcount": r(gs.groupby("month_key").headcount.sum().mean()),
+        "utilization_pct": r(100 * gs.billable_hours.sum() / gs.available_hours.sum())})
+    return out
+
+
+if __name__ == "__main__":
+    main()
