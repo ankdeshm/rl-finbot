@@ -676,6 +676,15 @@ def _wf_value(v, fmt: str) -> str:
     return F.value(v, "num")
 
 
+def _count_cmp(cur: float, py: float) -> str:
+    """'67 (209.4%) more than PY (32)'; the percentage only when PY is at least 20."""
+    d = round(cur) - round(py)
+    if d == 0:
+        return f"in line with PY ({F.num(py)})"
+    rel = f" ({F.pct(abs(d) / py)})" if py >= 20 else ""
+    return f"{F.num(abs(d))}{rel} {'more' if d > 0 else 'fewer'} than PY ({F.num(py)})"
+
+
 def facts_workforce(res: Result) -> list[str]:
     from app.semantic.query_builder import WF_METRICS
 
@@ -698,16 +707,23 @@ def facts_workforce(res: Result) -> list[str]:
                 s += "; " + cmp_phrase(cur - py, py, "PY", "num", None, rel=(cur / py - 1) if py else None)
         items[key] = s
     lv, rs = tot.get("Leavers"), tot.get("of which restructuring")
+    lpy, rpy = tot.get("_leavers_py"), tot.get("_restructuring_py")
     if _ok(lv):
-        s = f"Leavers: {F.num(lv)} ({F.num(lv - (rs or 0))} voluntary, {F.num(rs or 0)} restructuring)"
-        lpy, rpy = tot.get("_leavers_py"), tot.get("_restructuring_py")
-        if has_py and _ok(lpy):
-            s += f"; PY {F.num(lpy)} ({F.num(lpy - (rpy or 0))} voluntary, {F.num(rpy or 0)} restructuring)"
-        items["leavers"] = items["restructuring_leavers"] = s
+        rs, py_ok = rs or 0, has_py and _ok(lpy)
+        vol, vol_py, rs_py = lv - rs, (lpy - (rpy or 0)) if py_ok else None, rpy or 0
+        s = f"Leavers: {F.num(lv)}" + (f"; {_count_cmp(lv, lpy)}" if py_ok else "")
+        s += f"; of these {F.num(vol)} voluntary and {F.num(rs)} restructuring"
+        if py_ok:
+            s += f" (PY {F.num(vol_py)} voluntary and {F.num(rs_py)} restructuring)"
+        items["leavers"] = s
+        # each leaver type with its own change, so the total's change is never paired with one type
+        items["restructuring_leavers"] = f"Restructuring leavers: {F.num(rs)}" + (f"; {_count_cmp(rs, rs_py)}" if py_ok else "")
+        items["voluntary_leavers"] = f"Voluntary leavers: {F.num(vol)}" + (f"; {_count_cmp(vol, vol_py)}" if py_ok else "")
     if _ok(tot.get("Hires")):
-        items["hires"] = f"Hires: {F.num(tot['Hires'])}" + (f"; PY {F.num(tot['_hires_py'])}"
+        items["hires"] = f"Hires: {F.num(tot['Hires'])}" + (f"; {_count_cmp(tot['Hires'], tot['_hires_py'])}"
                                                             if has_py and _ok(tot.get("_hires_py")) else "")
-    order = [focus] + ["headcount", "attrition", "leavers", "hires", "utilization", "overtime", "voluntary_attrition", "fte"]
+    order = [focus] + ["headcount", "attrition", "leavers", "hires", "utilization", "overtime", "voluntary_attrition", "fte",
+                       "restructuring_leavers", "voluntary_leavers"]
     seen: list[str] = []
     for k in order:
         if k in items and items[k] not in seen:
@@ -724,18 +740,27 @@ def facts_workforce(res: Result) -> list[str]:
                 f"{r[label]} {F.num(r.get('Hires') or 0)} hires, {F.num(r.get('Leavers') or 0)} leavers" for r in body) + ".")
     elif body:
         pyc = WF_PY_COL.get(focus) if focus in ("headcount", "attrition", "utilization") else None
+        short = WF_SHORT.get(focus, focus)
+        lt = label if label.isupper() else label.lower()
+        ranked = m.get("group") not in ("grade", "staff_type")
+        # "highest attrition first" should not list roles with no leavers one by one
+        zero_skip = ranked and not m.get("ascending") and focus in (
+            "attrition", "voluntary_attrition", "leavers", "restructuring_leavers", "hires")
+        zeros = [r for r in body if zero_skip and _ok(r.get(fcol)) and abs(r.get(fcol)) < 1e-12]
         parts = []
-        for r in body[:10]:
+        for r in [r for r in body if r not in zeros][:10]:
             s = f"{r[label]} {_wf_value(r.get(fcol), ffmt)}" if _ok(r.get(fcol)) else f"{r[label]} n/a"
             if has_py and pyc and _ok(r.get(pyc)):
                 s += f" (PY {_wf_value(r[pyc], ffmt)})"
             parts.append(s)
-        short = WF_SHORT.get(focus, focus)
-        lt = label if label.isupper() else label.lower()
-        if m.get("group") in ("grade", "staff_type"):
-            head = f"By {lt}, {short}"
-        else:
+        if zeros:
+            noun = lt if len(zeros) == 1 else F.plural(lt)
+            parts.append(f"{'all ' if not parts else ''}{len(zeros)} {'other ' if parts else ''}{noun} "
+                         f"{_wf_value(0.0, ffmt)}")
+        if ranked:
             head = f"By {lt}, {'lowest' if m.get('ascending') else 'highest'} {short} first"
+        else:
+            head = f"By {lt}, {short}"
         n_all = m.get("entities_total", 0)
         more = f" ({len(body)} of {n_all} {F.plural(lt)} shown)" if n_all > len(body) else ""
         facts.append(f"{head}{more}: " + "; ".join(parts) + ".")
@@ -1032,7 +1057,10 @@ def tool_get_workforce(args: GetWorkforceArgs, ctx: ToolContext) -> ToolOutput:
     mem = ctx.memory if ctx.memory.get("tool") == "get_workforce" else {}
     group = _wf_norm_group(args.group_by) or wf_group_from(q) or (r.level_hint if r is not None else None) \
         or mem.get("wf_group") or "staff_type"
-    focus = _wf_norm_metric(args.metric) or wf_focus_from(q)
+    a_focus, q_focus = _wf_norm_metric(args.metric), wf_focus_from(q)
+    # the LLM often asks for "leavers" when the question says "restructuring leavers": keep the narrower figure
+    narrower = {"leavers": "restructuring_leavers", "attrition": "voluntary_attrition"}
+    focus = q_focus if a_focus and q_focus and narrower.get(a_focus) == q_focus else (a_focus or q_focus)
     if not focus and r is not None:
         rmap = {"utilization_rate": "utilization", "overtime_ratio": "overtime", "fte": "fte", "headcount": "headcount"}
         focus = rmap.get(r.ratio or "") or rmap.get((r.metrics or [""])[0])

@@ -10,7 +10,8 @@
               produces no usable call, a deterministic router supplies one (tracked as a fallback).
 * act:        tools run SQLAlchemy Core queries; the LLM never does arithmetic.
 * write:      the LLM writes the insight from pre-formatted FACTS only.
-* guard:      numeric guardrail; regenerate once, then fall back to a templated answer.
+* guard:      numeric guardrail plus narrative checks (month binding, scope, reasons that are not in
+              the data); regenerate once, then fall back to a templated answer.
 * finalize:   validated output contract (text, finance table, deterministic chart, filters, SQL,
               exactly three follow-up questions) + updated memory.
 """
@@ -313,7 +314,7 @@ def clean_answer(text: str) -> str:
         if re.match(r"^\s*([-*•]|\d+[.)])\s+", ln):        # bullets are added deterministically
             continue
         out.append(ln)
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+    return guardrails.canonical_terms(re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip())
 
 
 def make_followups(primary: ToolOutput | None, mg: dict, user_id: str) -> list[str]:
@@ -477,8 +478,10 @@ def node_write(state: AgentState) -> AgentState:
         msgs = [{"role": "system", "content": WRITER_SYSTEM},
                 {"role": "user", "content": WRITER_USER.format(question=state["question"], facts=facts, notes=notes)}]
         if state.get("attempts", 0) > 0 and state.get("answer"):
+            g = state.get("guard") or {}
+            problems = g.get("problems") or [f"numbers that are not in FACTS: {', '.join(g.get('unsupported', []))}"]
             msgs += [{"role": "assistant", "content": state["answer"]},
-                     {"role": "user", "content": WRITER_RETRY.format(bad=", ".join(state["guard"].get("unsupported", [])))}]
+                     {"role": "user", "content": WRITER_RETRY.format(problems="; ".join(problems))}]
         try:
             r = llm.chat(msgs, model=model, max_tokens=300)
             llm_calls.append({"step": f"write#{state.get('attempts', 0) + 1}", "latency": round(r.latency, 2),
@@ -495,23 +498,29 @@ def node_guard(state: AgentState) -> AgentState:
     outs = [ToolOutput(**o) for o in state["outputs"] if o.get("ok")]
     answer = state.get("answer") or ""
     attempts = state.get("attempts", 0)
-    g = guardrails.check_numbers(answer, outs, state["question"]) if answer else guardrails.GuardResult(False, ["<empty>"])
+    q = state["question"]
+    g = (guardrails.check_answer(answer, outs, q) if answer
+         else guardrails.GuardResult(False, ["<empty>"], problems=["the answer was empty"]))
     if answer and len(answer) < 40:
-        g = guardrails.GuardResult(False, ["<too short>"], g.checked)
+        g = guardrails.GuardResult(False, ["<too short>"], g.checked, problems=["the answer was too short"])
     history = list((state.get("guard") or {}).get("history", []))
     history.append({"attempt": attempts + 1, "ok": g.ok, "unsupported": g.unsupported, "checked": g.checked,
-                    **({} if g.ok else {"draft": answer[:700]})})
+                    **({} if g.ok else {"problems": g.problems, "draft": answer[:700]})})
     if g.ok:
-        return {"guard": {"ok": True, "template": False, "history": history, "unsupported": []}, "retry": False}
+        text, dropped = guardrails.drop_ungrounded(answer, outs)
+        return {"answer": text, "retry": False,
+                "guard": {"ok": True, "template": False, "history": history, "unsupported": [], "dropped": dropped}}
     if attempts < 1 and answer and _use_llm(state.get("model") or env("LLM_MODEL", "")):
-        return {"guard": {"ok": False, "template": False, "history": history, "unsupported": g.unsupported},
+        return {"guard": {"ok": False, "template": False, "history": history, "unsupported": g.unsupported,
+                          "problems": g.problems},
                 "retry": True, "attempts": attempts + 1}
     # Last resort before the template: keep the LLM text minus the sentences with unsupported numbers.
     red = redact_sentences(answer, g.unsupported) if answer and outs else ""
-    if red and len(red) >= 60 and guardrails.check_numbers(red, outs, state["question"]).ok:
+    if red and len(red) >= 60 and guardrails.check_answer(red, outs, q).ok:
+        red, dropped = guardrails.drop_ungrounded(red, outs)
         return {"answer": red, "retry": False,
                 "guard": {"ok": True, "template": False, "redacted": True, "history": history,
-                          "unsupported": g.unsupported}}
+                          "unsupported": g.unsupported, "dropped": dropped}}
     return {"answer": template_answer(outs) if outs else answer,
             "guard": {"ok": True, "template": True, "history": history, "unsupported": g.unsupported},
             "retry": False}

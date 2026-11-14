@@ -79,6 +79,11 @@ Rules:
   Never claim that something beat the budget or the prior year unless FACTS say so.
 - Explain only with drivers that appear in FACTS. Do not add generic reasons (efficiency, demand, market,
   cost management) that FACTS do not contain; if FACTS give no driver, describe the figures only.
+- Name the scope as the Scope line in FACTS does (e.g. "United States Environmental Lab Testing", not just
+  "the United States").
+- Keep every number with the month, entity and period that FACTS attach it to.
+- Use the names in FACTS (e.g. "operating profit", "operating margin", "EBIT"), also when the question uses
+  another term.
 - Amounts are in USD. Costs going up are unfavourable. At most 110 words."""
 
 WRITER_USER = """Question: {question}
@@ -91,5 +96,6 @@ NOTES:
 
 Write the answer now."""
 
-WRITER_RETRY = """Your previous answer used numbers that are not in FACTS: {bad}.
-Rewrite it using ONLY numbers copied exactly from FACTS. Do not compute differences, sums or averages yourself."""
+WRITER_RETRY = """Your previous answer had these problems: {problems}.
+Rewrite it. Use ONLY numbers copied exactly from FACTS, keep each number with the month, entity and scope that
+FACTS attach it to, and do not compute differences, sums or averages yourself."""

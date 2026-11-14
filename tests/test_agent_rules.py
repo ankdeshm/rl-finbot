@@ -2,6 +2,7 @@
 full LangGraph pipeline, output contract, chart selection, follow-ups, memory and refusals."""
 from __future__ import annotations
 
+import re
 from datetime import date
 
 import pytest
@@ -169,6 +170,35 @@ def test_workforce_respects_access_scope():
     ans, _ = ask("Attrition by country this year", "env_pl_leader", model="rules", as_of=AS_OF)
     assert ans.status == "ok"
     assert {r["Country"] for r in ans.table if r["_kind"] != "subtotal"} == {"Canada", "United States"}
+
+
+def test_highest_first_lists_do_not_list_zero_values():
+    # The small US Environmental Lab Testing unit had leavers in one role only.
+    ans, _ = ask("Attrition by role for United States Environmental Lab Testing this year", "group_cfo",
+                 model="rules", as_of=AS_OF)
+    assert ans.status == "ok"
+    line = next(ln for ln in ans.answer_markdown.splitlines() if "highest attrition" in ln)
+    assert " 0.0% (PY" not in line, line
+    assert re.search(r"\d+ other roles 0\.0%", line), line
+
+
+def test_workforce_counts_come_with_their_py_comparison():
+    # The writer must never compute "59 more than last year" itself: the fact states it.
+    ans, _ = ask("How many restructuring leavers did Canada Environmental Lab Testing have this year?", "group_cfo",
+                 model="rules", as_of=AS_OF)
+    assert ans.status == "ok"
+    assert "Restructuring leavers: 62; 59 more than PY (3)" in ans.answer_markdown, ans.answer_markdown[:400]
+
+
+def test_question_keeps_the_narrower_workforce_figure(monkeypatch):
+    # The LLM asks for "leavers" while the question says "restructuring leavers": the narrower figure wins.
+    from app.agent import graph, llm
+    fake = llm.LLMResult(content="", tool_calls=[{"name": "get_workforce", "arguments": {
+        "org": "Canada Environmental Lab Testing", "period": "YTD", "metric": "leavers"}}], native_tool_call=True)
+    monkeypatch.setattr(graph.llm, "chat", lambda *a, **k: fake)
+    ans, _ = ask("How many restructuring leavers did Canada Environmental Lab Testing have this year?", "group_cfo",
+                 model="ollama/stub", as_of=AS_OF)
+    assert ans.status == "ok" and ans.answer_markdown.startswith("**Restructuring leavers: 62"), ans.answer_markdown[:200]
 
 
 def test_turnover_alone_is_revenue_not_attrition():

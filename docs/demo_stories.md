@@ -32,7 +32,7 @@ budget rate. As-of date 2026-11-12, so the last closed month is October 2026.
 | Personnel costs | USD 27.0M | USD 28.6M | USD 30.8M |
 | Operating profit | USD 1.57M | USD 7.88M | USD 8.92M |
 | Operating margin (on revenue) | 2.9% | 12.7% | |
-| Utilization rate | 67.9% | 73.9% | |
+| Utilization rate | 67.9% | 73.8% | |
 
 - Production is 14.2% below PY and 20.8% below budget.
 - Personnel costs adjust only from May 2026 (about USD 2.9–3.1M a month in Jan–Apr, about USD 2.5M from May), three months after the volume loss.
@@ -53,7 +53,7 @@ The employee records tell the same story:
 
 ## c. Mexico Buildings & Infrastructure: WIP build-up and reversal (2026)
 
-| Period | WIP change (account 2.1) |
+| Period | Work-in-progress change |
 |---|---:|
 | Jan–Jun 2026 (build-up) | +USD 835k |
 | Jul–Sep 2026 (reversal) | −USD 793k |
@@ -62,7 +62,7 @@ The employee records tell the same story:
 
 Billing rises from about USD 0.74–0.88M a month in H1 to USD 1.02–1.20M a month in Jul–Oct, when the work in progress is invoiced.
 
-The agent reports the P&L line "WIP & deferred income", which is account 2.1 plus the deferred income change (account 2.2). On that line its trend answer shows: Jan–Jun 2026 +USD 822k (positive every month), Jul–Sep 2026 −USD 783k (negative every month), YTD +USD 42k.
+The agent reports the P&L line "WIP & deferred income", which is the work-in-progress change plus the deferred income change. On that line its trend answer shows: Jan–Jun 2026 +USD 822k (positive every month), Jul–Sep 2026 −USD 783k (negative every month), YTD +USD 42k.
 
 ## d. Chile Metals & Minerals: subcontracting above budget (2026)
 

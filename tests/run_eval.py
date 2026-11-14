@@ -174,6 +174,8 @@ def run_question(item: dict, model: str) -> dict:
         rec["guard"] = "retry"
     else:
         rec["guard"] = "first_pass"
+    rec["guard_problems"] = [p for h in hist for p in (h.get("problems") or [])]
+    rec["dropped_sentences"] = g.get("dropped") or []
     return rec
 
 
@@ -227,6 +229,10 @@ def _quantile(vals: list[float], q: float) -> float | None:
 def summarize(recs: list[dict]) -> dict:
     lat = [r["latency"] for r in recs if r.get("latency") is not None and r.get("expected_status") == "ok"]
     guards = [r.get("guard") for r in recs if r.get("guard")]
+    llm = [r for r in recs if r.get("guard")]
+
+    def flagged(word: str) -> int:
+        return sum(any(word in p for p in (r.get("guard_problems") or [])) for r in llm)
     return {
         "questions": len(recs),
         "status": _rate(recs, "status_ok"), "tool": _rate(recs, "tool_ok"), "llm_tool": _rate(recs, "llm_tool_ok"),
@@ -235,6 +241,11 @@ def summarize(recs: list[dict]) -> dict:
         "guard_retry": (sum(g == "retry" for g in guards) / len(guards)) if guards else None,
         "guard_redacted": (sum(g == "redacted" for g in guards) / len(guards)) if guards else None,
         "guard_template": (sum(g == "template" for g in guards) / len(guards)) if guards else None,
+        "llm_answers": len(llm),
+        "flag_numbers": flagged("numbers that are not in FACTS"), "flag_month": flagged("figure in FACTS"),
+        "flag_scope": flagged("name the scope"), "flag_reasons": flagged("reasons that are not in FACTS"),
+        "dropped_sentences": sum(len(r.get("dropped_sentences") or []) for r in llm),
+        "dropped_answers": sum(bool(r.get("dropped_sentences")) for r in llm),
         "p50": _quantile(lat, 0.5), "p95": _quantile(lat, 0.95),
         "crashes": sum(1 for r in recs if r.get("status") == "crash"),
     }
@@ -283,6 +294,18 @@ def report(items: list[dict]) -> None:
               "- **Guardrail**: share of LLM answers that passed the numeric check first time, passed after one "
               "rewrite, passed after dropping the sentences with unsupported numbers, or were replaced by the "
               "templated answer.", ""]
+    lines += ["## Narrative checks", "",
+              "Answers whose drafts the guard rejected, by reason (an answer can have several), and sentences "
+              "dropped from accepted answers because they gave causes that the data does not contain.", "",
+              "| Model | LLM answers | Number not in data | Number tied to the wrong month or leaver type | "
+              "Scope named too broadly | Cause not in data (headline) | Sentences dropped (answers) |",
+              "|:---|---:|---:|---:|---:|---:|---:|"]
+    for m, s in summ.items():
+        if not s.get("llm_answers"):
+            continue
+        lines.append(f"| `{m}` | {s['llm_answers']} | {s['flag_numbers']} | {s['flag_month']} | {s['flag_scope']} | "
+                     f"{s['flag_reasons']} | {s['dropped_sentences']} ({s['dropped_answers']}) |")
+    lines.append("")
     cats = list(dict.fromkeys(it["category"] for it in items))
     for m, recs in models.items():
         lines += [f"## Per category: `{m}`", "",

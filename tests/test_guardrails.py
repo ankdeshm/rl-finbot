@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent.guardrails import SqlGuardError, check_numbers, execute_readonly, extract_numbers, validate_sql
+from app.agent.guardrails import (SqlGuardError, _month_mentions, canonical_terms, check_answer, check_numbers,
+                                   drop_ungrounded, execute_readonly, extract_numbers, validate_sql)
 from app.agent.tools import ToolOutput
 from app.config import backend
 from app.db import get_engine
@@ -114,3 +115,111 @@ def test_redaction_drops_only_sentences_with_unsupported_numbers():
     assert redact_sentences(text, ["<empty>"]) == ""
     # The headline sentence itself is unsupported: use the template instead of a dangling remainder.
     assert redact_sentences(text, ["54.4M"]) == ""
+
+
+# ------------------------------------------------------------------------------------------ narrative checks
+WF_FACTS = ["Scope Canada · Environmental Lab Testing, YTD Oct 2026: workforce from fictional employee records (Actual).",
+            "Attrition rate (annualised): 33.6%; 23.6 pp above PY (10.1%), unfavourable.",
+            "Leavers: 99 (37 voluntary, 62 restructuring); PY 32 (29 voluntary, 3 restructuring).",
+            "Month with the most leavers: Apr 2026 (63, of which 60 restructuring)."]
+
+
+def _scoped(facts, org="Canada · Environmental Lab Testing", period="YTD Oct 2026", months="Jan 2026 - Oct 2026",
+            kind="workforce"):
+    return ToolOutput(tool="t", kind=kind, facts=facts,
+                      filters_used={"org": org, "period": period, "months": months})
+
+
+def test_month_mentions_tell_single_months_from_period_bounds():
+    assert _month_mentions("62 in Apr 2026") == [("Apr 2026", True)]
+    assert _month_mentions("in April 2026") == [("Apr 2026", True)]
+    assert _month_mentions("YTD Oct 2026") == [("Oct 2026", False)]
+    assert _month_mentions("Jan–Jun 2026") == [("Jun 2026", False)]
+    assert [s for _, s in _month_mentions("from 390 in Apr 2026 to 327 in May 2026")] == [False, True]
+
+
+def test_month_binding_flags_a_number_tied_to_the_wrong_month():
+    outs = [_scoped(WF_FACTS)]
+    bad = "Attrition is 33.6%, driven by restructuring leavers (62 in Apr 2026)."
+    assert check_numbers(bad, outs).ok                  # 62 exists in the data, so the number check alone passes
+    g = check_answer(bad, outs)
+    assert not g.ok and "62" in g.unsupported and any("Apr 2026" in p for p in g.problems)
+    good = "Attrition is 33.6%, 23.6 pp above PY (10.1%). Leavers peaked in April 2026 at 63, of which 60 were restructuring."
+    assert check_answer(good, outs).ok
+    # right month, wrong leaver type: April had 63 leavers, 60 of them restructuring
+    g = check_answer("Attrition is 33.6%, with 63 restructuring leavers in Apr 2026.", outs)
+    assert not g.ok and any("Apr 2026 restructuring" in p for p in g.problems)
+
+
+def test_small_counts_stated_as_a_difference_are_checked():
+    outs = [_scoped(WF_FACTS + ["Restructuring leavers: 62; 59 more than PY (3)."])]
+    assert not check_numbers("Canada had 62 restructuring leavers, 30 above PY (32).", outs).ok
+    assert check_numbers("Canada had 62 restructuring leavers, 59 more than PY (3), across 5 BUs.", outs).ok
+
+
+def test_counts_must_keep_their_leaver_type():
+    outs = [_scoped(WF_FACTS)]
+    g = check_answer("Canada Environmental Lab Testing had 99 restructuring leavers this year.", outs)
+    assert not g.ok and any("restructuring figure" in p for p in g.problems)
+    assert check_answer("Canada Environmental Lab Testing had 62 restructuring and 37 voluntary leavers this year.", outs).ok
+    # a year total and a monthly figure in one sentence: only the number next to the month is tied to it
+    assert check_answer("Leavers totalled 99 this year, with a peak of 63 in April 2026.", outs).ok
+    # the change in all leavers (67) given to one leaver type
+    typed = [_scoped(["Leavers: 99; 67 (209.4%) more than PY (32); of these 37 voluntary and 62 restructuring "
+                      "(PY 29 voluntary and 3 restructuring).", "Restructuring leavers: 62; 59 more than PY (3).",
+                      "Voluntary leavers: 37; 8 (27.6%) more than PY (29)."])]
+    g = check_answer("Leavers rose, with restructuring accounting for 67 (209.4%) more leavers than PY (32).", typed)
+    assert not g.ok and any("change in restructuring leavers" in p for p in g.problems)
+    assert check_answer("Canada Environmental Lab Testing had 62 restructuring leavers, 59 more than PY (3).", typed).ok
+
+
+def test_month_binding_ignores_the_question_period():
+    outs = [_scoped(["Scope United States · Elevators & Pressure Vessels, Mar 2025: Actual vs PY.",
+                     "Direct staff costs: Actual USD 1.6M, USD 342k (27.0%) higher than PY (USD 1.3M), unfavourable."],
+                    org="United States · Elevators & Pressure Vessels", period="Mar 2025",
+                    months="Mar 2025 - Mar 2025", kind="drivers")]
+    text = "Direct staff costs for US Elevators & Pressure Vessels in March 2025 were USD 1.6M, USD 342k (27.0%) higher than PY."
+    assert check_answer(text, outs, "Break down direct staff costs for US Elevators & Pressure Vessels in March 2025").ok
+
+
+def test_scope_named_too_broadly_is_flagged():
+    outs = [_scoped(["Attrition rate (annualised): 15.5%; 3.5 pp above PY (12.0%), unfavourable."],
+                    org="United States · Environmental Lab Testing")]
+    g = check_answer("The attrition rate in the United States is 15.5%, 3.5 pp above PY (12.0%).", outs)
+    assert not g.ok and any("name the scope" in p for p in g.problems)
+    for text in ("The attrition rate for United States Environmental Lab Testing is 15.5%, 3.5 pp above PY (12.0%).",
+                 "The attrition rate in the US Env Lab unit is 15.5%, 3.5 pp above PY (12.0%).",
+                 "The attrition rate is 15.5%, 3.5 pp above PY (12.0%)."):
+        assert check_answer(text, outs).ok, text
+
+
+def test_causes_not_in_the_data_are_dropped():
+    outs = [_out(["Operating profit: Actual USD 59.2M; USD 3.2M (5.8%) above PY (USD 55.9M), favourable.",
+                  "Operating profit vs PY: increase of USD 3.2M driven by Production (USD 14.8M higher, favourable)."])]
+    text = ("Operating profit is USD 59.2M, USD 3.2M (5.8%) above PY. Production was USD 14.8M higher. "
+            "This reflects higher sales volumes and improved cost management.")
+    assert check_answer(text, outs).ok
+    kept, dropped = drop_ungrounded(text, outs)
+    assert kept == "Operating profit is USD 59.2M, USD 3.2M (5.8%) above PY. Production was USD 14.8M higher."
+    assert len(dropped) == 1
+    g = check_answer("Strong demand lifted operating profit to USD 59.2M.", outs)
+    assert not g.ok and any("reasons that are not in FACTS" in p for p in g.problems)
+
+
+def test_customer_terms_are_written_with_generic_names():
+    assert canonical_terms("The MAOP margin for Paraguay is 11.3%. MAOP rose; management OP fell.") == \
+        "The operating margin for Paraguay is 11.3%. Operating profit rose; EBIT fell."
+
+
+def test_causes_must_name_something_in_the_data():
+    rank = [ToolOutput(tool="t", kind="ranking", facts=["1. Argentina 9.5% (PY 9.5%, +0.0 pp)"],
+                       data=[{"Rank": 1, "Country": "Argentina", "Actual": 0.095}])]
+    text = "Argentina has the lowest operating margin this year at 9.5%. The decline is driven by higher costs and lower revenue growth."
+    kept, dropped = drop_ungrounded(text, rank)
+    assert kept == "Argentina has the lowest operating margin this year at 9.5%." and len(dropped) == 1
+    pnl = [ToolOutput(tool="t", kind="pnl", facts=["Operating profit: Actual USD 59.2M."],
+                      data=[{"Line": "Production"}, {"Line": "Personnel costs"}])]
+    grounded = "Operating profit is USD 59.2M. The increase is driven by higher Production, partly offset by Personnel costs."
+    assert drop_ungrounded(grounded, pnl) == (grounded, [])
+    g = check_answer("Operating profit is USD 59.2M, due to strong client momentum.", pnl)
+    assert not g.ok and any("reasons that are not in FACTS" in p for p in g.problems)
