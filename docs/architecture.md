@@ -10,7 +10,7 @@ flowchart LR
     PL --> A["act<br/>typed tools -> semantic layer<br/>-> SQLAlchemy Core"]
     A --> DB[("SQL Server 2022<br/>row-level security")]
     A --> W["write<br/>LLM narrative from FACTS"]
-    W --> G["guard<br/>numeric check<br/>(1 rewrite, then redact or template)"]
+    W --> G["guard<br/>numbers, months, scope, causes<br/>(1 rewrite, then redact or template)"]
     G -->|retry| W
     G --> F
     F --> U
@@ -30,11 +30,16 @@ The flow is a LangGraph state graph (`app/agent/graph.py`) with six nodes.
    - If the LLM's call fails, the router's call is tried once.
 4. **write.** The LLM receives pre-formatted FACTS only and writes 2–4 sentences.
    - It does no arithmetic.
-   - The FACTS spell out comparisons ("USD 3.5M (6.8%) above PY (USD 51.0M), favourable").
-5. **guard.** Every number in the text must exist in the tool output, within display rounding.
-   - If a number does not, the writer gets one rewrite.
-   - If the rewrite also fails, the sentences with unsupported numbers are dropped, as long as the first (headline) sentence survives. Otherwise a templated answer replaces the text.
-   - The check covers numbers, not the labels attached to them; the table and the key-figure bullets always come straight from the data.
+   - The FACTS spell out comparisons ("USD 3.2M (5.8%) above PY (USD 55.9M), favourable").
+5. **guard.** Every number in the text must exist in the tool output, within display rounding. On top of that (`app/agent/guardrails.py`, `check_answer`):
+   - a number next to a single month, or labelled restructuring / voluntary, must be the data's number for that month or leaver type, and a change stated for a leaver type must be that type's change;
+   - small numbers are checked when they are stated as a difference ("30 above PY");
+   - the scope may not be named more broadly than asked ("the United States" for United States · Environmental Lab Testing);
+   - a cause ("driven by …", "due to …") must name a line, account, driver, role, BU or month from the data, and listed generic causes ("sales volumes", "cost management") must appear in the facts.
+   - If the draft fails, the writer gets one rewrite with the problems spelled out. If the rewrite also fails, the sentences with unsupported numbers are dropped, as long as the first (headline) sentence survives. Otherwise a templated answer replaces the text.
+   - Sentences after the headline that give causes not in the data are dropped from an accepted answer.
+   - Customer terms typed in the question (MAOP) are written with the app's names in the answer.
+   - The table and the key-figure bullets always come straight from the data.
 6. **finalize.** Builds the validated output contract (`FinalAnswer`):
    - narrative + deterministic key-figure bullets + scope notes
    - finance table spec

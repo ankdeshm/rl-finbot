@@ -85,7 +85,7 @@ The checks below are in `tests/test_semantic.py`, `tests/test_guardrails.py`, `t
 - Employee records add up to the BU statistics; workforce totals match the BU statistics and a raw count of leavers.
 - Row-level security, both in the semantic layer and natively in SQL Server (fact and employee tables).
 - The SQL guard: DML / DDL / EXEC / non-whitelisted tables are rejected, and the row limit is enforced.
-- The numeric guardrail, including the redaction rule (the headline sentence must survive).
+- The numeric guardrail, including the redaction rule (the headline sentence must survive), and the narrative checks: numbers tied to the right month and leaver type, the scope named in full, causes taken from the data, and customer terms written with the app's names.
 - P&L answers state the line, sub-group or account the question asks about first, and keep PY / Budget unless the user asks for Actual only.
 - Workforce routing, follow-up memory, the restructuring story and access scope.
 - The output contract.

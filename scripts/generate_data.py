@@ -919,16 +919,16 @@ def compute_stories(t: dict[str, pd.DataFrame]) -> dict:
                 "wip_ytd_oct_2026": r(in26(wip, 202601, 202610).sum()),
                 "wip_ytd_oct_2025": r(in26(wip, 202501, 202510).sum())}
 
-    a26, b26, a25 = (lines(slice_("d", "Actual", 202601, 202610)), lines(slice_("d", "Budget", 202601, 202610)),
-                     lines(slice_("d", "Actual", 202501, 202510)))
-    out["d"] = {"subcontracting_ytd_oct_2026_actual": r(a26["subcontracting"]),
-                "subcontracting_ytd_oct_2026_budget": r(b26["subcontracting"]),
-                "subcontracting_ytd_oct_2025_actual": r(a25["subcontracting"]),
-                "vs_budget_pct": r(100 * (a26["subcontracting"] / b26["subcontracting"] - 1)),
-                "vs_py_pct": r(100 * (a26["subcontracting"] / a25["subcontracting"] - 1)),
-                "subcontracting_pct_of_production_2026": r(100 * a26["subcontracting"] / a26["production"]),
-                "subcontracting_pct_of_production_2025": r(100 * a25["subcontracting"] / a25["production"]),
-                "maop_ytd_oct_2026_actual": r(a26["maop"]), "maop_ytd_oct_2026_budget": r(b26["maop"])}
+    act26, bud26, act25 = (lines(slice_("d", "Actual", 202601, 202610)), lines(slice_("d", "Budget", 202601, 202610)),
+                           lines(slice_("d", "Actual", 202501, 202510)))
+    out["d"] = {"subcontracting_ytd_oct_2026_actual": r(act26["subcontracting"]),
+                "subcontracting_ytd_oct_2026_budget": r(bud26["subcontracting"]),
+                "subcontracting_ytd_oct_2025_actual": r(act25["subcontracting"]),
+                "vs_budget_pct": r(100 * (act26["subcontracting"] / bud26["subcontracting"] - 1)),
+                "vs_py_pct": r(100 * (act26["subcontracting"] / act25["subcontracting"] - 1)),
+                "subcontracting_pct_of_production_2026": r(100 * act26["subcontracting"] / act26["production"]),
+                "subcontracting_pct_of_production_2025": r(100 * act25["subcontracting"] / act25["production"]),
+                "maop_ytd_oct_2026_actual": r(act26["maop"]), "maop_ytd_oct_2026_budget": r(bud26["maop"])}
 
     marg, marg_fy = {}, {}
     for y in range(FIRST_YEAR, LAST_YEAR + 1):

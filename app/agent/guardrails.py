@@ -540,9 +540,7 @@ def drop_ungrounded(answer: str, tool_outputs: list) -> tuple[str, list[str]]:
 
 _CANONICAL = [(re.compile(r"\bMAOP margins?\b", re.I), "operating margin"),
               (re.compile(r"\bMAOP\b", re.I), "operating profit"),
-              (re.compile(r"\bmanagement OP\b", re.I), "EBIT"),
-              (re.compile(r"\b(?:AD50|ADSO)\b", re.I), "general ledger"),
-              (re.compile(r"\bB26\b"), "constant budget rate")]
+              (re.compile(r"\bmanagement OP\b", re.I), "EBIT")]
 
 
 def canonical_terms(text: str) -> str:
