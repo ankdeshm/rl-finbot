@@ -215,3 +215,101 @@ def test_text_tool_call_parser_knows_every_tool():
     assert set(TOOLS) <= set(llm.TOOL_NAMES)
     calls = llm.calls_from_text('{"name": "get_workforce", "arguments": {"org": "Canada", "group_by": "role"}}')
     assert calls and calls[0]["name"] == "get_workforce" and calls[0]["arguments"]["group_by"] == "role"
+
+
+# --------------------------------------------------------------------------- conversations
+def _chat(*turns, user="group_cfo"):
+    mem, answers = {}, []
+    for q in turns:
+        ans, mem = ask(q, user, memory=mem, model="rules", as_of=AS_OF)
+        answers.append(ans)
+    return answers, mem
+
+
+def _versions(ans) -> list[str]:
+    return [v.split(" (")[0] for v in ans.filters_used.get("versions", [])]
+
+
+def test_followup_keeps_the_pnl_line_asked_about():
+    (_, a2), _ = _chat("What is the net income of Mexico this year?", "now for Canada")
+    assert a2.filters_used["org_filter"] == {"l3_country": ["Canada"]}
+    assert a2.answer_markdown.startswith("**Net income: Actual USD"), a2.answer_markdown[:120]
+    assert a2.filters_used["carried_over"][0] == "Net income"
+
+
+def test_negated_period_is_replaced():
+    (_, a2), _ = _chat("How is operating profit YTD vs last year and budget for Mexico?", "not YTD, full year 2025")
+    assert a2.filters_used["period"] == "FY 2025" and a2.filters_used["org_filter"] == {"l3_country": ["Mexico"]}
+    assert a2.diagnostics["negated"] == ["YTD"]
+
+
+def test_negated_measure_is_replaced():
+    (_, a2), _ = _chat("How is operating profit YTD for Mexico?", "No, not operating profit, net income")
+    assert a2.answer_markdown.startswith("**Net income: Actual USD"), a2.answer_markdown[:120]
+
+
+def test_compare_with_last_year_is_a_comparison_not_a_period():
+    (a1, a2), _ = _chat("What is the operating margin of Peru this year?", "how does that compare with last year?")
+    assert a2.filters_used["period"] == a1.filters_used["period"] == "YTD Oct 2026"
+    assert a2.filters_used["org_filter"] == {"l3_country": ["Peru"]}
+
+
+def test_reference_word_anywhere_makes_a_followup():
+    (_, a2), _ = _chat("How is operating profit YTD for Colombia?", "Can you show me how that compares with the budget?")
+    assert a2.diagnostics["followup"] and a2.filters_used["org_filter"] == {"l3_country": ["Colombia"]}
+    assert "Budget" in _versions(a2)
+
+
+def test_pushback_explains_what_was_used_and_keeps_memory():
+    (_, a2), mem = _chat("What is the net income of Mexico this year?", "That's not right")
+    assert a2.status == "clarification" and not a2.table and not a2.sql_used
+    for part in ("Net income", "Mexico", "YTD Oct 2026", "prior year (PY) and Budget", "general ledger"):
+        assert part in a2.answer_markdown, part
+    assert a2.diagnostics["options_mode"] == "question" and len(a2.diagnostics["options"]) == 4
+    assert mem["last_used"]["measure"] == "Net income"          # the pushback turn leaves the memory as it was
+
+
+def test_each_pushback_option_changes_one_part():
+    (_, a2), mem = _chat("What is the net income of Mexico this year?", "That's not right")
+    measure, scope, period, comparison = a2.diagnostics["options"]
+    res = {o: ask(o, "group_cfo", memory=mem, model="rules", as_of=AS_OF)[0] for o in a2.diagnostics["options"]}
+    assert res[measure].answer_markdown.startswith("**Operating profit: Actual USD"), measure
+    assert res[scope].filters_used["org"] == "RL Group" and res[scope].answer_markdown.startswith("**Net income"), scope
+    assert res[period].filters_used["period"] == "Oct 2026" and res[period].filters_used["org"] == "Mexico", period
+    assert _versions(res[comparison]) == ["Actual", "Budget"], comparison
+
+
+def test_scope_as_a_whole_replaces_the_previous_scope():
+    (_, a2), _ = _chat("Attrition by role for Canada Environmental Lab Testing this year", "Show Canada as a whole instead")
+    assert a2.filters_used["org_filter"] == {"l3_country": ["Canada"]}
+
+
+def test_conversation_history_is_bounded():
+    (*_, last), mem = _chat("How is operating profit YTD for Mexico?", "now for Canada", "now for Chile", "now for Peru",
+                            "now for Brazil", "now for Colombia")
+    assert len(mem["history"]) == 5 and mem["history"][-1]["q"] == "now for Colombia"
+    assert last.filters_used["carried_over"] == ["Operating profit", "YTD Oct 2026"]
+
+
+def test_planner_sees_the_recent_questions(monkeypatch):
+    from app.agent import graph, llm
+    prompts = []
+
+    def fake_chat(msgs, **_kwargs):
+        prompts.append(msgs[-1]["content"])
+        return llm.LLMResult(content="", tool_calls=[], native_tool_call=False)
+
+    _, mem = _chat("What is the net income of Mexico this year?")
+    monkeypatch.setattr(graph.llm, "chat", fake_chat)
+    ask("now for Canada", "group_cfo", memory=mem, model="ollama/stub", as_of=AS_OF)
+    assert '1. "What is the net income of Mexico this year?" -> used: Net income · Mexico · YTD Oct 2026' in prompts[0]
+
+
+def test_llm_copy_of_the_corrected_away_period_is_ignored(monkeypatch):
+    from app.agent import graph, llm
+    _, mem = _chat("How is operating profit YTD vs last year and budget for Mexico?")
+    stale = llm.LLMResult(content="", tool_calls=[{"name": "get_pnl", "arguments": {
+        "org": "Mexico", "period": "YTD", "versions": ["Actual", "PY", "Budget"]}}], native_tool_call=True)
+    monkeypatch.setattr(graph.llm, "chat", lambda *a, **k: stale)
+    ans, _ = ask("not YTD, full year 2025", "group_cfo", memory=mem, model="ollama/stub", as_of=AS_OF)
+    assert ans.filters_used["period"] == "FY 2025" and ans.filters_used["org"] == "Mexico"

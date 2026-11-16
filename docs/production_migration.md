@@ -26,15 +26,40 @@ SQL views. Most of the work is therefore mapping the customer's tables to those 
 | User identity | The UI sets `user_id` from SSO (Entra ID / Okta) instead of the persona selector |
 | Secrets | Key Vault / Secret Manager; never in `.env` files on shared hosts |
 | LLM data flow | The LLM receives only pre-aggregated facts (no row-level data). Use a provider and region covered by the customer's data-processing agreement, or a self-hosted model |
+| Employee data | Limit workforce questions to HR and finance roles; hide groups too small to stay anonymous; privacy review for employee-level data (Canadian and US rules differ) |
 | Audit | Log every question, the user, the tool calls and the SQL statements (they are already returned in each answer's diagnostics) |
 
 ## 3. LLM choice
 
-- **Changing models.** `LLM_MODEL` takes any LiteLLM model string, for example `azure/<deployment>`, `vertex_ai/gemini-2.5-flash`, `bedrock/...` or `ollama/...`.
-- **Choosing a model.** Re-run `make eval` with each candidate. The report compares tool choice, numeric accuracy, guardrail outcomes and latency on the same questions.
+- **Use the endpoint the customer is licensed for.** `LLM_MODEL` takes any LiteLLM model string, for example `azure/<deployment>` (Azure OpenAI), `openai/<model>`, `vertex_ai/gemini-2.5-flash`, `bedrock/...` or `ollama/...`. A Microsoft 365 Copilot licence usually does not cover API calls from a custom application; those normally go through Azure OpenAI, billed separately. Confirm with the customer's Microsoft team.
+- **Check the terms.** Data retention, no training on customer data, processing region (Canada / US), rate limits and cost per question.
+- **Choosing a model.** Re-run `make eval` with each candidate. The report compares tool choice, numeric accuracy, guardrail outcomes and latency on the same questions. The prompts were tuned on small local models, so measure before switching.
+- **Pin the model version** and re-run the evaluation before every upgrade; hosted models change behaviour between versions.
 - **CPU-only models.** These run at 20–100 s per answer in this prototype (see the eval report). Production needs a GPU-backed endpoint or a managed API for interactive use.
+- **Teams / Copilot.** The tools can also be exposed as an API, so a Copilot agent (for example built in Copilot Studio) can call them from Teams. The semantic layer, row-level security and guardrails stay in this service.
 
-## 4. Hosting
+## 4. Conversation memory
+
+**Today (prototype).** Memory lives in the browser session: the scope, measure, period and comparison of the last answer, ranked items for "the first one", and the last five questions with what each used (the LLM planner sees these). Follow-ups, corrections ("no, I meant Mexico", "not YTD, full year 2025") and pushback ("that's not right") use it. "New conversation", a persona change or a page refresh clears it.
+
+**Across conversations (production design, not built).** This needs a decision on retention and privacy first:
+
+| Item | Proposal |
+|---|---|
+| Store | A table such as `conversation_turn(user_id, conversation_id, turn_no, question, used_json, created_at)` in the application database, keyed by the SSO user id |
+| What is stored | The question and what the answer used (measure, scope, period, comparison, tool), not the figures; reopening a conversation re-runs the questions on current data and current access rights |
+| Who sees it | Only the user (row-level security on the table); administrators through the audit log only |
+| Retention | Set by the customer (for example 30 or 90 days), purged automatically; users can delete their own history |
+| LLM | Only the last few turns of the open conversation are sent, as today |
+| Privacy | Questions can name employees or groups of employees, so the store follows the employee-data rules above |
+
+## 5. Answer quality in production
+
+- **Golden questions from the team.** Rewrite `tests/golden_questions.yaml` with the finance team's real questions and the answers they check in Tableau; agree pass thresholds.
+- **Re-run on every change** of model, prompt, metric definition or data mapping (`make eval`).
+- **Feedback.** Add thumbs up / down to each answer and review flagged answers regularly, together with the guardrail outcome logged per answer.
+
+## 6. Hosting
 
 | Option | Notes |
 |---|---|
@@ -42,16 +67,18 @@ SQL views. Most of the work is therefore mapping the customer's tables to those 
 | docker compose | Single VM next to SQL Server; ports bound to localhost behind a reverse proxy with SSO |
 | Kubernetes | As in this prototype (`deploy/k8s/`); expose through an ingress with SSO instead of port-forward |
 
-## 5. Relationship to Tableau
+## 7. Relationship to Tableau
 
 - **Tableau stays the system for standard dashboards.** The copilot covers the ad-hoc questions that today become dashboard requests.
 - **Same numbers.** Both read the same SQL Server views, so the figures match. A Tableau extract of the views can be reconciled automatically.
 - **Linking out.** Answers can link to the matching Tableau view by passing the resolved filters (org, period, version) as URL parameters.
 
-## 6. Checklist
+## 8. Checklist
 
 - [ ] Views mapped to the customer's tables; `make reconcile` shows 0 mismatches against the published P&L.
 - [ ] Entitlements mapped; RLS tests pass for real users.
 - [ ] Golden questions rewritten with the customer's names; `make eval` meets the agreed thresholds.
-- [ ] LLM endpoint approved by security; prompts contain no row-level data.
+- [ ] LLM endpoint approved by security; model version pinned; prompts contain no row-level data.
+- [ ] Employee-data access and minimum group size agreed; privacy review done.
+- [ ] Decision on conversation history across sessions (retention, deletion, who can see it).
 - [ ] SSO in front of the UI; audit log enabled.

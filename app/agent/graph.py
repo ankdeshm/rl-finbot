@@ -5,9 +5,13 @@
        +-- refuse/clarify --+-- tool error -+--> finalize  (guard may loop back to write once)
 
 * preprocess: deterministic entity resolution, conversation memory merge (follow-ups such as
-  "now for Canada", "split direct staff costs by BU", "same vs FC2"), access check (polite refusal, never data).
-* plan:       the LLM chooses the tool and arguments (native tool calling via LiteLLM). If the model
-              produces no usable call, a deterministic router supplies one (tracked as a fallback).
+  "now for Canada", "split direct staff costs by BU", "same vs FC2", or "how does that compare with last
+  year?"; corrections such as "no, I meant Mexico" or "not YTD, full year 2025"), pushback without details
+  ("that's not right": what the previous answer used, with options to change each part), access check
+  (polite refusal, never data).
+* plan:       the LLM chooses the tool and arguments (native tool calling via LiteLLM), seeing the last few
+              questions of the conversation. If the model produces no usable call, a deterministic router
+              supplies one (tracked as a fallback).
 * act:        tools run SQLAlchemy Core queries; the LLM never does arithmetic.
 * write:      the LLM writes the insight from pre-formatted FACTS only.
 * guard:      numeric guardrail plus narrative checks (month binding, scope, reasons that are not in
@@ -28,12 +32,13 @@ from pydantic import BaseModel, Field
 
 from app.agent import guardrails, llm
 from app.agent.prompts import PLANNER_SYSTEM, PLANNER_USER, WRITER_RETRY, WRITER_SYSTEM, WRITER_USER
-from app.agent.tools import DATA_TOOLS, TOOLS, ToolContext, ToolOutput, openai_tools, run_tool
-from app.config import as_of_date, env
+from app.agent.tools import DATA_TOOLS, TOOLS, ToolContext, ToolOutput, openai_tools, run_tool, wf_focus_from
+from app.config import as_of_date, env, settings
 from app.semantic import time_intel as ti
 from app.semantic.access import check_access, child_level, default_org, level_label, scope_label
 from app.semantic.dims import dims
-from app.semantic.entity_resolver import LEVEL_LABEL, Resolution, org_label, resolve
+from app.semantic.entity_resolver import LEVEL_LABEL, ORG_LEVELS, Resolution, org_label, resolve
+from app.semantic.query_builder import WF_METRICS
 from app.semantic.registry import registry
 from app.viz import format as F
 from app.viz.charts import chart_spec
@@ -92,6 +97,24 @@ class AgentState(TypedDict, total=False):
 
 FOLLOWUP_RX = re.compile(r"^\s*(now|and|what about|how about|same|also|ok|okay|then|split|break|drill|"
                          r"show me the same|vs\.?|versus|compare that|for|instead|only)\b", re.I)
+# Corrections of the previous answer: "no, I meant Mexico", "not YTD, full year 2025", "use Q3 instead"
+CORRECTION_RX = re.compile(r"^\s*(?:no|nope|nah|wrong|actually|sorry|oops|correction|rather|instead|not|use|make it|"
+                           r"change (?:it|that|this) to|switch to)\b"
+                           r"|\b(?:i meant|i mean|i wanted|i was asking|i asked for|instead|rather than)\b", re.I)
+# Words that point back to the previous answer, anywhere in the question ("how does that compare ...")
+REF_RX = re.compile(r"\b(?:that|it|its|this(?!\s+(?:year|month|quarter|period|fy|ytd))|those|these|them|same|"
+                    r"there|again|above|previous|earlier)\b", re.I)
+# Pushback without saying what is wrong: answered with what was used and options to change it
+DISPUTE_RX = re.compile(
+    r"\b(?:that'?s|that is|this is|it'?s|it is|these are|those are|the (?:numbers?|figures?|answer) (?:is|are))\s+"
+    r"(?:not (?:right|correct|accurate|what i (?:asked|meant|wanted))|wrong|incorrect|inaccurate|off)\b"
+    r"|\bare you sure\b|\b(?:doesn'?t|does not|don'?t|do not) (?:look|seem|sound) (?:right|correct)\b"
+    r"|\b(?:looks|seems|sounds) (?:wrong|off|incorrect|too (?:high|low))\b|\bcan'?t be (?:right|correct)\b"
+    r"|\bi (?:don'?t|do not) (?:think|believe) (?:that'?s|that is|this is|it'?s|it is) (?:right|correct)\b"
+    r"|\b(?:that|this|it) (?:doesn'?t|does not) (?:match|add up)\b"
+    r"|^\s*(?:no[,.!]?\s+)?(?:wrong|incorrect|not right|not correct|really)\s*[?!.]*\s*$", re.I)
+# "Canada as a whole", "all of Canada", "total Canada": replace the scope instead of narrowing the previous one
+SCOPE_RESET_RX = re.compile(r"\b(?:as a whole|all of|the whole of|whole|total|entire|overall)\b", re.I)
 
 
 def _use_llm(model: str | None) -> bool:
@@ -104,11 +127,21 @@ def _use_llm(model: str | None) -> bool:
 def is_followup(q: str, res: Resolution, mem: dict) -> bool:
     if not mem:
         return False
-    if FOLLOWUP_RX.search(q):
+    if FOLLOWUP_RX.search(q) or CORRECTION_RX.search(q) or DISPUTE_RX.search(q):
         return True
     has_metric = bool(res.metric)
     has_org = bool(res.org_filter)
+    if REF_RX.search(q) and not (has_metric and has_org):
+        return True
     return len(q.split()) <= 7 and not (has_metric and has_org)
+
+
+def is_dispute(q: str, res: Resolution, mem: dict) -> bool:
+    """'That's not right' / 'are you sure?' after an answer, with nothing new to change."""
+    if not (mem or {}).get("last_used") or not DISPUTE_RX.search(q):
+        return False
+    return not (res.org_filter or res.metric or res.period or res.versions or res.comparisons or res.level_hint
+                or set(res.intents) - {"pnl"})
 
 
 ORDINAL_RX = re.compile(
@@ -147,7 +180,9 @@ def merge_context(res: Resolution, mem: dict, followup: bool) -> dict:
          "ascending": res.ascending, "intents": list(res.intents), "tool": None, "followup": followup}
     if not followup:
         return m
-    if res.org_filter:
+    if res.org_filter and SCOPE_RESET_RX.search(res.clean_text or res.text or ""):
+        m["org_filter"] = dict(res.org_filter)
+    elif res.org_filter:
         org = dict(mem.get("org_filter") or {})
         changed_levels = set(res.org_filter)
         if changed_levels & {"l1_group", "l2_region", "l3_country", "l4_product_line"}:
@@ -165,6 +200,8 @@ def merge_context(res: Resolution, mem: dict, followup: bool) -> dict:
         m["org_filter"] = dict(mem.get("org_filter") or {})
     if not res.metric:
         m["metric"], m["ratio"] = mem.get("metric"), mem.get("ratio")
+        if m["metric"] and m["metric"] != m["ratio"] and registry().get_metric(m["metric"]) is not None:
+            m["metrics"] = [m["metric"]]        # the tools read `metrics`: keeps the P&L line asked about earlier
     if not res.period:
         m["period"], m["period_is_range"] = mem.get("period"), mem.get("period_is_range", False)
     if not res.versions and not res.comparisons:
@@ -377,6 +414,145 @@ def make_followups(primary: ToolOutput | None, mg: dict, user_id: str) -> list[s
 
 
 # ------------------------------------------------------------------------------------------
+# Conversation: what each answer used, what a follow-up carried over, replies to pushback
+# ------------------------------------------------------------------------------------------
+COMPARISON_TEXT = {"PY": "prior year (PY)", "LatestFC": "latest forecast"}
+NO_COMPARISON_OPTION = ("rank_entities", "get_kpi_cockpit", "get_workforce")
+
+
+def _and(items: list[str]) -> str:
+    items = [i for i in items if i]
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _measure_label(primary: ToolOutput, mg: dict) -> str:
+    reg = registry()
+    if primary.tool == "get_workforce":
+        focus = primary.meta.get("focus") or "headcount"
+        return WF_METRICS.get(focus, (None, focus.replace("_", " ").capitalize()))[1]
+    if primary.tool == "get_kpi_cockpit":
+        return "Operational KPI cockpit"
+    args = primary.meta.get("args", {}) or {}
+    mid = args.get("ratio_name") or args.get("metric_or_ratio") or args.get("metric") or mg.get("ratio") or mg.get("metric")
+    r = reg.get_ratio(mid) if mid else None
+    if r is not None:
+        return r.name
+    m = reg.get_metric(mid) if mid else None
+    return m.name if m is not None else reg.metrics["maop"].name
+
+
+def used_record(primary: ToolOutput, mg: dict, filters: dict) -> dict:
+    """What an answer used, for the pushback reply, the "Carried over" line and the planner's history."""
+    labels = []
+    for v in filters.get("versions") or []:
+        lbl = str(v).split(" (")[0].strip()
+        if lbl and lbl not in labels:
+            labels.append(lbl)
+    comps = [v for v in labels if v != "Actual"]
+    wf = primary.tool == "get_workforce"
+    if wf and not comps:
+        comps = ["PY"]
+    measure = _measure_label(primary, mg)
+    scope = filters.get("org") or org_label(mg.get("org_filter") or {})
+    period = filters.get("period") or ""
+    source = ("fictional employee records, closed months" if wf else
+              f"general ledger (GL) management P&L and statistics, closed months, {filters.get('currency', 'USD')} "
+              f"at {settings().get('fx_rate_label', 'constant budget rate')}")
+    vs = ("vs " + _and(comps)) if comps else ""
+    return {"measure": measure, "scope": scope, "period": period, "months": filters.get("months") or "",
+            "period_type": (mg.get("period") or {}).get("type") or "YTD", "comparisons": comps,
+            "comparison_text": _and([COMPARISON_TEXT.get(c, c) for c in comps]) or "no comparison",
+            "source": source, "tool": primary.tool,
+            "text": " · ".join(x for x in (measure, scope, period, vs) if x) + f" ({primary.tool})"}
+
+
+def carried_labels(used: dict, mg: dict) -> list[str]:
+    """What a follow-up took from earlier turns (e.g. ["Net income", "YTD Oct 2026"]), shown under the answer."""
+    if not mg.get("followup"):
+        return []
+    asked, had = mg.get("asked") or {}, mg.get("had") or {}
+    out = []
+    if had.get("metric") and not asked.get("metric") and used["tool"] != "get_kpi_cockpit":
+        out.append(used["measure"])
+    if had.get("org") and not asked.get("org"):
+        out.append(used["scope"])
+    if had.get("period") and not asked.get("period") and used["period"]:
+        out.append(used["period"])
+    if had.get("versions") and not asked.get("versions") and used["comparisons"]:
+        out.append("vs " + _and(used["comparisons"]))
+    return out
+
+
+def history_text(mem: dict | None) -> str:
+    hist = (mem or {}).get("history") or []
+    if not hist:
+        return "none (first question of the conversation)"
+    return "\n".join(f'{i}. "{h.get("q", "")}" -> used: {h.get("used", "")}' for i, h in enumerate(hist[-4:], 1))
+
+
+def _alt_measure(used: dict, mem: dict) -> str | None:
+    if used.get("tool") == "get_workforce":
+        return "headcount" if str(mem.get("wf_focus") or "").endswith("attrition") else "attrition"
+    if used.get("tool") == "get_kpi_cockpit":
+        return None
+    if mem.get("ratio"):
+        return "direct margin" if mem["ratio"] == "maop_margin_revenue" else "operating margin"
+    return "revenue" if (mem.get("metric") or "maop") == "maop" else registry().metrics["maop"].name.lower()
+
+
+def _parent_scope(org_filter: dict, user_id: str) -> str | None:
+    """'Canada as a whole' for Canada · Environmental Lab Testing; 'the whole RL Group' for a country."""
+    levels = [lvl for lvl in ORG_LEVELS if lvl in (org_filter or {}) and lvl != "l1_group"]
+    if not levels:
+        return None
+    parent = {k: v for k, v in org_filter.items() if k not in (levels[-1], "l1_group")}
+    if check_access(user_id, parent).status != "ok":
+        return None
+    return f"{org_label(parent)} as a whole" if parent else "the whole RL Group"
+
+
+def change_options(mem: dict, user_id: str) -> list[str]:
+    """One button per part of the previous answer (measure, scope, period, comparison). Each is a complete
+    follow-up question that the correction handling understands."""
+    used = mem.get("last_used") or {}
+    opts = []
+    alt = _alt_measure(used, mem)
+    if alt:
+        opts.append(f"Show {alt} instead")
+    parent = _parent_scope(mem.get("org_filter") or {}, user_id)
+    if parent:
+        opts.append(f"Show {parent} instead")
+    opts.append("Use this year to date instead" if used.get("period_type") == "MONTH" else "Use last month instead")
+    comps = used.get("comparisons") or []
+    if used.get("tool") not in NO_COMPARISON_OPTION:
+        if "PY" in comps and "Budget" in comps:
+            opts.append("Compare with Budget only")
+        elif comps == ["Budget"]:
+            opts.append("Compare with last year instead")
+        else:
+            opts.append("Compare with Budget instead")
+    return opts
+
+
+def dispute_reply(mem: dict, user_id: str) -> tuple[str, list[str]]:
+    """Answer to 'that's not right' / 'are you sure?': exactly what was used, and what can be changed."""
+    u = mem["last_used"]
+    period = u["period"] + (f" ({u['months']})" if u.get("months") else "")
+    msg = ("Here is exactly what I used for the previous answer:\n\n"
+           f"- **Measure:** {u['measure']}\n"
+           f"- **Scope:** {u['scope']}\n"
+           f"- **Period:** {period}\n"
+           f"- **Compared with:** {u['comparison_text']}\n"
+           f"- **Source:** {u['source']}\n\n"
+           "Every figure comes straight from the database; the SQL is under \"How I got this\" in the previous "
+           "answer. Which part should change? Pick one below, or type it, for example \"No, I meant Canada\" or "
+           "\"use Q3 2026 instead\".")
+    return msg, change_options(mem, user_id)
+
+
+# ------------------------------------------------------------------------------------------
 # Graph nodes
 # ------------------------------------------------------------------------------------------
 def node_preprocess(state: AgentState) -> AgentState:
@@ -393,8 +569,21 @@ def node_preprocess(state: AgentState) -> AgentState:
         res.level_hint, res.top_n, res.ascending = None, None, None
     follow = is_followup(q, res, mem) or bool(ref)
     mg = merge_context(res, mem, follow)
+    # what the question named itself vs what the conversation already had (for the "Carried over" line)
+    mg["asked"] = {"org": bool(res.org_filter) and not ref, "metric": bool(res.metric or wf_focus_from(res.clean_text)),
+                   "period": bool(res.period), "versions": bool(res.versions or res.comparisons)}
+    mg["had"] = {"metric": bool(mem.get("metric") or mem.get("ratio") or mem.get("wf_focus")),
+                 "org": bool(mem.get("org_filter")) or bool(ref), "period": bool(mem.get("period")),
+                 "versions": bool(mem.get("versions") or mem.get("comparisons"))}
+    mg["question"] = res.clean_text or q          # without corrected-away phrases ("not YTD")
+    if res.negated:
+        mg["negated"] = list(res.negated)
     route, message, options = "plan", "", []
-    if res.ambiguous:
+    if is_dispute(q, res, mem):
+        route = "clarify"
+        message, options = dispute_reply(mem, user)
+        mg["options_mode"] = "question"           # each option is a complete follow-up question
+    elif res.ambiguous:
         amb = res.ambiguous[0]
         route = "clarify"
         options = amb["options"]
@@ -421,10 +610,7 @@ def node_plan(state: AgentState) -> AgentState:
         msgs = [{"role": "system", "content": PLANNER_SYSTEM.format(last_closed=ti.month_label(ti.last_closed_month()))},
                 {"role": "user", "content": PLANNER_USER.format(
                     question=state["question"], resolved=json.dumps(_compact(mg)),
-                    memory=json.dumps({"org": org_label(state["memory"].get("org_filter") or {}),
-                                       "tool": state["memory"].get("tool"),
-                                       "metric": state["memory"].get("ratio") or state["memory"].get("metric")})
-                    if state.get("memory") else "none", suggested=hint)}]
+                    history=history_text(state.get("memory")), suggested=hint)}]
         try:
             r = llm.chat(msgs, tools=openai_tools(DATA_TOOLS), model=model)
             llm_calls.append({"step": "plan", "latency": round(r.latency, 2), "usage": r.usage,
@@ -440,16 +626,48 @@ def node_plan(state: AgentState) -> AgentState:
         calls, source = [suggested], source + "+router_followup"
     if not calls:
         calls = [suggested]
+    calls = respect_corrections(calls, mg, date.fromisoformat(state["as_of"]) if state.get("as_of") else as_of_date())
     timings = dict(state.get("timings", {}))
     timings["plan"] = round(time.time() - t0, 3)
     return {"calls": calls, "tool_choice_source": source, "llm_calls": llm_calls, "errors": errors,
             "timings": timings}
 
 
+def respect_corrections(calls: list[dict], mg: dict, as_of: date) -> list[dict]:
+    """The LLM sometimes copies the corrected-away value into its arguments (period "YTD" after "not YTD, full
+    year 2025"). Drop such a period so the tool uses the resolved one, and swap a negated measure for the
+    corrected measure."""
+    neg = mg.get("negated") or []
+    if not neg:
+        return calls
+    neg_periods, neg_measures = set(), set()
+    for phrase in neg:
+        p = ti.parse_period_text(phrase, as_of).period
+        if p is not None:
+            neg_periods.add((p.period_type, p.end_key))
+        _kind, obj = registry().resolve(phrase)
+        if obj is not None:
+            neg_measures.add(obj.id)
+    replacement = mg.get("ratio") or mg.get("metric")
+    out = []
+    for c in calls:
+        args = dict(c.get("arguments") or {})
+        per = args.get("period")
+        if isinstance(per, str) and per.strip():
+            p = ti.parse_period_text(per, as_of).period
+            if p is not None and (p.period_type, p.end_key) in neg_periods:
+                args["period"] = ""
+        for key in ("metric", "metric_or_ratio", "ratio_name"):
+            if args.get(key) in neg_measures and replacement and replacement not in neg_measures:
+                args[key] = replacement
+        out.append({**c, "arguments": args})
+    return out
+
+
 def node_act(state: AgentState) -> AgentState:
     t0 = time.time()
     as_of = date.fromisoformat(state["as_of"]) if state.get("as_of") else as_of_date()
-    ctx = ToolContext(user_id=state["user_id"], as_of=as_of, question=state["question"],
+    ctx = ToolContext(user_id=state["user_id"], as_of=as_of, question=state["merged"].get("question") or state["question"],
                       resolution=_resolution_from(state["merged"], state["question"]),
                       memory=state.get("memory") or {})
     outputs = [run_tool(c["name"], c.get("arguments") or {}, ctx) for c in state["calls"]]
@@ -603,10 +821,19 @@ def node_finalize(state: AgentState) -> AgentState:
                                                    "Impact", "_fav")][0]
             new_mem.update({"entities": [str(r.get(lbl)) for r in rows][:25],
                             "entities_level": primary.meta.get("org_level"), "entities_ascending": False})
+    if primary and status == "ok":
+        used = used_record(primary, mg, filters)
+        carried = carried_labels(used, mg)
+        if carried:
+            filters["carried_over"] = carried
+        history = list((state.get("memory") or {}).get("history") or [])[-4:]
+        new_mem["history"] = history + [{"q": state["question"], "used": used["text"]}]
+        new_mem["last_used"] = used
     timings = dict(state.get("timings", {}))
     diag = {"tool_calls": state.get("calls", []), "tool_choice_source": state.get("tool_choice_source", "none"),
             "suggested": state.get("suggested"), "guardrail": state.get("guard"), "llm_calls": state.get("llm_calls", []),
             "errors": state.get("errors", []) + [o.error for o in outs if o.error],
+            "options_mode": mg.get("options_mode"), "negated": mg.get("negated", []),
             "model": state.get("model"), "timings": timings, "resolved": _compact(mg) if mg else {},
             "followup": mg.get("followup", False), "options": state.get("options", []),
             "facts": [f for o in ok_outs for f in o.facts],

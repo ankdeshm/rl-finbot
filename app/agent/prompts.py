@@ -59,9 +59,12 @@ A: get_workforce {{"period": "YTD", "group_by": "BU", "metric": "attrition", "to
 PLANNER_USER = """Question: {question}
 
 RESOLVED (deterministic, use these): {resolved}
-CONVERSATION CONTEXT (previous turn, reuse for follow-ups): {memory}
+CONVERSATION SO FAR (oldest first; reuse for follow-ups):
+{history}
 Suggested tool: {suggested}
 
+If the question corrects the previous answer ("no, I meant ...", "not X", "instead of X"), keep everything else
+from the previous question and change only that part; RESOLVED already includes the correction.
 Call the best tool now."""
 
 WRITER_SYSTEM = """You are an experienced TIC finance analyst at RL Certification & Inspection writing for business leaders

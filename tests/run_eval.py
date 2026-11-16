@@ -124,6 +124,9 @@ def run_question(item: dict, model: str) -> dict:
            "tool_choice_source": d.get("tool_choice_source"), "tool_calls": d.get("tool_calls"),
            "errors": d.get("errors"), "answer": ans.answer_markdown,
            "llm_seconds": round(sum(c.get("latency", 0) for c in d.get("llm_calls", [])), 2)}
+    if exp_status == "clarification" and item.get("options_min"):
+        rec["options"] = list(d.get("options") or [])          # pushback: one button per part to change
+        rec["status_ok"] = rec["status_ok"] and len(rec["options"]) >= item["options_min"]
     # tool choice
     tools = item.get("tools")
     primary = new_mem.get("tool") if ans.status == "ok" else None

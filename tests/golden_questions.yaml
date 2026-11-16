@@ -446,6 +446,95 @@
     - {m: maop, org: {l3_country: United States}, p: YTD-2026-10}
     - {m: maop, org: {l3_country: United States}, p: YTD-2026-10, v: FC2}
 
+# ------------------------------------------------------------------------------- conversations (corrections, references, pushback)
+- id: conv_not_ytd_full_year
+  category: conversation
+  turns: ["How is operating profit YTD vs last year and budget for Mexico?"]
+  q: not YTD, full year 2025
+  tools: [get_pnl]
+  expect:
+    - {m: maop, org: {l3_country: Mexico}, p: FY-2025}
+    - {m: maop, org: {l3_country: Mexico}, p: FY-2025, v: PY}
+- id: conv_not_operating_profit
+  category: conversation
+  turns: ["How is operating profit YTD for Mexico?"]
+  q: No, not operating profit, net income
+  tools: [get_pnl]
+  expect:
+    - {m: net_income, org: {l3_country: Mexico}, p: YTD-2026-10}
+- id: conv_line_kept_new_country
+  category: conversation
+  turns: ["What is the net income of Mexico this year?"]
+  q: now for Canada
+  tools: [get_pnl]
+  expect:
+    - {m: net_income, org: {l3_country: Canada}, p: YTD-2026-10}
+- id: conv_line_kept_cost
+  category: conversation
+  turns: ["What are personnel costs for Brazil this year?"]
+  q: and for Chile?
+  tools: [get_pnl, variance_drivers]
+  expect:
+    - {m: personnel, org: {l3_country: Chile}, p: YTD-2026-10}
+- id: conv_compare_with_last_year
+  category: conversation
+  turns: ["What is the operating margin of Peru this year?"]
+  q: how does that compare with last year?
+  tools: [get_ratio, variance_drivers, get_trend]
+  expect:
+    - {r: [maop, revenue], org: {l3_country: Peru}, p: YTD-2026-10}
+    - {r: [maop, revenue], org: {l3_country: Peru}, p: YTD-2026-10, v: PY}
+- id: conv_that_vs_budget
+  category: conversation
+  turns: ["How is operating profit YTD for Colombia?"]
+  q: Can you show me how that compares with the budget?
+  tools: [get_pnl, compare_versions]
+  expect:
+    - {m: maop, org: {l3_country: Colombia}, p: YTD-2026-10}
+    - {m: maop, org: {l3_country: Colombia}, p: YTD-2026-10, v: Budget}
+- id: conv_same_business_leavers
+  category: conversation
+  turns: ["Attrition by role for Canada Environmental Lab Testing this year vs last year", "now for the United States"]
+  q: Can you show me the monthly leavers for the same business?
+  tools: [get_workforce]
+  expect:
+    - {w: leavers, org: {l3_country: United States, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+- id: conv_meant_other_country
+  category: conversation
+  turns: ["How is revenue YTD vs budget for Argentina?"]
+  q: No, I meant Uruguay
+  tools: [get_pnl, variance_drivers, compare_versions]
+  expect:
+    - {m: revenue, org: {l3_country: Uruguay}, p: YTD-2026-10}
+    - {m: revenue, org: {l3_country: Uruguay}, p: YTD-2026-10, v: Budget}
+- id: conv_quarter_rather_than_ytd
+  category: conversation
+  turns: ["What is the utilization rate in the United States this year?"]
+  q: use Q3 2026 rather than YTD
+  tools: [get_ratio, get_trend, get_workforce]
+  expect:
+    - {r: [billable_hours, available_hours], org: {l3_country: United States}, p: Q-2026-3}
+- id: conv_pushback_not_right
+  category: conversation
+  turns: ["What is the net income of Mexico this year?"]
+  q: That's not right
+  status: clarification
+  options_min: 4
+- id: conv_pushback_are_you_sure
+  category: conversation
+  turns: ["Attrition by role for Canada Environmental Lab Testing this year vs last year"]
+  q: are you sure?
+  status: clarification
+  options_min: 3
+- id: conv_pushback_then_budget_only
+  category: conversation
+  turns: ["What is the net income of Mexico this year?", "That's not right"]
+  q: Compare with Budget only
+  tools: [get_pnl]
+  expect:
+    - {m: net_income, org: {l3_country: Mexico}, p: YTD-2026-10}
+    - {m: net_income, org: {l3_country: Mexico}, p: YTD-2026-10, v: Budget}
+
 # ------------------------------------------------------------------------------- row-level security
 - id: rls_us_head_brazil_refused
   category: rls

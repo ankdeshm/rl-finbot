@@ -155,9 +155,11 @@ def render_answer(ans: dict, idx: int, cfg: dict) -> None:
         st.markdown(f"<div class='rl-refusal'>🔒 {ans['answer_markdown']}</div>", unsafe_allow_html=True)
     elif status == "clarification":
         st.info(ans["answer_markdown"])
-        for j, opt in enumerate(ans.get("diagnostics", {}).get("options", [])[:6]):
+        d = ans.get("diagnostics", {})
+        as_question = d.get("options_mode") == "question"    # "Show revenue instead", "Use last month instead"
+        for j, opt in enumerate(d.get("options", [])[:6]):
             if st.button(opt, key=f"opt_{idx}_{j}"):
-                st.session_state.pending = f"{opt}: {ans.get('diagnostics', {}).get('question', '')}".strip(": ")
+                st.session_state.pending = opt if as_question else f"{opt}: {d.get('question', '')}".strip(": ")
                 st.rerun()
     else:
         st.markdown(ans["answer_markdown"])
@@ -166,6 +168,8 @@ def render_answer(ans: dict, idx: int, cfg: dict) -> None:
                          f.get("currency")) if x]
     if chips and status == "ok":
         st.markdown("".join(f"<span class='rl-chip'>{c}</span>" for c in chips), unsafe_allow_html=True)
+    if f.get("carried_over") and status == "ok":
+        st.caption("↪ Carried over: " + " · ".join(f["carried_over"]))
     tspec = ans.get("table_spec") or {}
     if tspec.get("columns"):
         st.markdown(TABLE_CSS + render_html(tspec, cfg["units"]), unsafe_allow_html=True)

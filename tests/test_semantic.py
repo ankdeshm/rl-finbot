@@ -169,6 +169,22 @@ def test_metric_and_ratio_resolution():
     assert resolve("net income 2025", org, AS_OF).metric == "net_income"
 
 
+def test_corrections_drop_the_negated_part():
+    org = dims().org
+    r = resolve("not YTD, full year 2025", org, AS_OF)
+    assert r.period["type"] == "FY" and r.period["end"] == 202512 and r.negated == ["YTD"]
+    assert resolve("No, not operating profit, net income", org, AS_OF).metric == "net_income"
+    assert resolve("operating profit instead of net income", org, AS_OF).metrics == ["maop"]
+    assert resolve("use Q3 2026 rather than YTD", org, AS_OF).period["type"] == "QUARTER"
+    r = resolve("Which BUs did not meet budget this year?", org, AS_OF)      # a verb is negated, not a correction
+    assert "Budget" in r.versions and r.negated == []
+
+
+def test_compare_with_last_year_is_a_comparison():
+    r = resolve("how does that compare with last year?", dims().org, AS_OF)
+    assert r.comparisons == ["PY"] and r.period is None
+
+
 def test_ambiguous_city_triggers_clarification():
     cities = dims().org.groupby("city")["l5_business"].nunique()
     city = cities[cities > 1].index[0]

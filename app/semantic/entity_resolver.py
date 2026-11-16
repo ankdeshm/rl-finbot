@@ -122,10 +122,23 @@ LEVEL_PATTERNS = [
     ("l3_country", r"\b(by|per|each|across|which|all|top|bottom|worst|best)\s+(\d+\s+)?(countries|country)\b|\bcountries\b"),
     ("l2_region", r"\b(by|per|each|across|which|all|top|bottom|worst|best)\s+(\d+\s+)?(regions?)\b|\bregions\b"),
 ]
-PY_RX = re.compile(r"\b(?:vs\.?|versus|compared (?:to|with)|against|than|relative to|over)\s+(?:the\s+)?"
+PY_RX = re.compile(r"\b(?:vs\.?|versus|compared? (?:(?:it|that|this|them|these|those) )?(?:to|with)|"
+                   r"comparison (?:to|with)|against|than|relative to|over)\s+(?:the\s+)?"
                    r"(?:last year|prior year|previous year|py|ly|same period last year|a year ago)\b"
                    r"|\b(?:yoy|y-o-y|year[- ]over[- ]year|year[- ]on[- ]year)\b|\bsame period last year\b"
                    r"|\bvs\.?\s*py\b")
+# Corrections ("not YTD, full year 2025", "net income, not operating profit", "Q3 instead of YTD"): the negated
+# phrase is removed before parsing, but only when it starts with something the resolver knows (period, version,
+# comparison, measure, workforce figure, org), so "BUs that did not meet budget" keeps its meaning.
+NEGATION_RX = re.compile(r"\b(?:not|instead of|rather than)\s+(?P<phrase>[^,.;:?!]+?)"
+                         r"(?=\s*(?:[,.;:?!]|\bbut\b|\brather\b|\binstead\b|\bplease\b|$))", re.I)
+NEG_LEAD_RX = re.compile(r"^(?:(?:the|for|in|on|at|of|vs\.?|versus|against|compared (?:to|with))\s+)+", re.I)
+NOT_A_CORRECTION = set("""meet met meeting reach reached achieve achieved hit beat beating exceed exceeded make made
+perform performing performed doing done do profitable good bad enough so very too as yet only just much many sure
+right correct wrong included including counting part available growing improving""".split())
+SLOT_START_RX = re.compile(r"^(?:py|ly|prior year|previous year|last year|budget|plan|forecast|outlook|fc\s*[123]|"
+                           r"actuals?|attrition|voluntary attrition|leavers?|restructuring leavers|hires|headcount|"
+                           r"utili[sz]ation|overtime|fte)\b", re.I)
 VERSION_RXS = [
     ("FC1", re.compile(r"\b(?:fc\s*1|forecast\s*1|first forecast)\b")),
     ("FC2", re.compile(r"\b(?:fc\s*2|forecast\s*2|second forecast)\b")),
@@ -164,6 +177,8 @@ class Resolution:
     top_n: int | None = None
     ascending: bool | None = None
     intents: list[str] = field(default_factory=list)
+    negated: list[str] = field(default_factory=list)     # phrases corrected away ("not YTD" -> ["YTD"])
+    clean_text: str = ""                                 # the question without those phrases
 
     @property
     def metric(self) -> str | None:
@@ -349,10 +364,46 @@ def _find_matches(norm: str, index: dict[str, list[dict]], kind: str, max_n: int
     return sorted(chosen, key=lambda m: m.start)
 
 
+def _names_a_slot(phrase: str, org_idx: dict[str, list[dict]], as_of: date) -> bool:
+    """True if the phrase starts with something the resolver knows: a period, version, comparison, measure,
+    workforce figure or org ("YTD", "net income", "Canada"), not a verb or adjective ("meet budget")."""
+    core = NEG_LEAD_RX.sub("", phrase.strip())
+    words = core.split()
+    if not words or words[0].lower() in NOT_A_CORRECTION:
+        return False
+    if SLOT_START_RX.match(core) or words[0] in COUNTRY_CODES or words[0] in PL_CODES:
+        return True
+    pp = ti.parse_period_text(core, as_of)
+    if pp.period and pp.matched and core.lower().startswith(pp.matched[0].strip()):
+        return True
+    norm = normalize(core)
+    for idx, kind in ((_metric_index(), "metric"), (org_idx, "org")):
+        hits = _find_matches(norm, idx, kind, fuzzy=False)
+        if hits and hits[0].start == 0:
+            return True
+    return False
+
+
+def strip_negations(text: str, org_idx: dict[str, list[dict]], as_of: date) -> tuple[str, list[str]]:
+    """Blank out corrected-away phrases ("not YTD", "instead of net income"). Returns (text, removed phrases);
+    the text keeps its length and letter case, so code and position-based matching still work."""
+    removed: list[str] = []
+
+    def repl(m: re.Match) -> str:
+        if not _names_a_slot(m.group("phrase"), org_idx, as_of):
+            return m.group(0)
+        removed.append(NEG_LEAD_RX.sub("", m.group("phrase").strip()))
+        return " " * len(m.group(0))
+
+    return NEGATION_RX.sub(repl, text or ""), removed
+
+
 def resolve(text: str, org_df: pd.DataFrame, as_of: date | None = None) -> Resolution:
     as_of = as_of or ti.as_of_date()
     res = Resolution(text=text)
-    raw = text or ""
+    org_idx = _org_index(_org_records(org_df))
+    raw, res.negated = strip_negations(text or "", org_idx, as_of)
+    res.clean_text = re.sub(r"\s+", " ", raw).strip(" ,;")
     low = raw.lower()
 
     # comparisons / versions (remove PY phrases before period parsing)
@@ -408,7 +459,6 @@ def resolve(text: str, org_df: pd.DataFrame, as_of: date | None = None) -> Resol
         i = norm.find(normalize(s))
         if i >= 0:
             period_spans.append((i, i + len(normalize(s))))
-    org_idx = _org_index(_org_records(org_df))
     org_hits += _find_matches(norm, org_idx, "org", fuzzy=True, blocked=metric_spans + period_spans)
 
     # ISO country / product-line codes: only when written in upper case
