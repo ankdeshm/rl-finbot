@@ -3,9 +3,10 @@
     pip install playwright && playwright install chromium     # or run in mcr.microsoft.com/playwright/python
     python scripts/ui_walkthrough.py http://localhost:8501 results/ui_walkthrough [rules,llm]
 
-Rules mode runs every step (expected figures for the as-of date 2026-11-12 in the demo data); LLM mode
-(the default model) runs four of them and reads the tool-choice source and guardrail result from
-"How I got this". Writes one JSON line per step to walkthrough.jsonl and an element screenshot per answer.
+Rules mode runs every step (expected figures for the as-of date 2026-11-12 in the demo data), including a
+conversation with a follow-up, a pushback and one of its change buttons; LLM mode (the default model) runs six
+of the steps and reads the tool-choice source and guardrail result from "How I got this". Writes one JSON line
+per step to walkthrough.jsonl and an element screenshot per answer.
 """
 import json
 import re
@@ -60,7 +61,8 @@ def wait_answer(page, before: int, timeout_s: int) -> float:
         if msgs.count() >= before + 2:
             txt = msgs.last.inner_text()
             done = ("Follow-up questions" in txt or "Sorry, you don't have access" in txt
-                    or "Something went wrong" in txt or "Which one do you mean" in txt)
+                    or "Something went wrong" in txt or "Which one do you mean" in txt
+                    or "Which part should change" in txt)
             if done and "Analysing the data" not in txt:
                 time.sleep(3)
                 return time.time() - t0
@@ -158,6 +160,15 @@ def rules_walk(page) -> None:
     new_conversation(page)
     check(page, "5d_highest_attrition_bus", "rules", "button", "Which BUs have the highest attrition this year?",
           ["CA-ENV-MTL-01", "39.2%", "CA-ENV-CAL-01", "37.1%", "35.8%"])
+    new_conversation(page)
+    check(page, "7a_net_income_mexico", "rules", "typed", "What is the net income of Mexico this year?",
+          ["Net income", "USD 8.3M"])
+    check(page, "7b_followup_keeps_line", "rules", "typed", "now for Canada",
+          ["Net income", "Canada", "Carried over: Net income · YTD Oct 2026"])
+    check(page, "7c_pushback", "rules", "typed", "That's not right",
+          ["Here is exactly what I used", "Measure: Net income", "Scope: Canada", "Period: YTD Oct 2026",
+           "Show operating profit instead", "Use last month instead", "Compare with Budget only"])
+    check(page, "7d_change_button", "rules", "button", "Compare with Budget only", ["Net income", "Budget", "Canada"])
 
 
 def llm_walk(page) -> None:
@@ -173,6 +184,11 @@ def llm_walk(page) -> None:
           timeout_s=600, open_details=True)
     check(page, "6a_followup_us", "llm", "typed", "now for the United States",
           ["United States · Environmental Lab Testing"], timeout_s=600, open_details=True)
+    new_conversation(page)
+    check(page, "7a_net_income_mexico", "llm", "typed", "What is the net income of Mexico this year?", ["8.3"],
+          timeout_s=600, open_details=True)
+    check(page, "7b_followup_keeps_line", "llm", "typed", "now for Canada",
+          ["Net income", "Carried over: Net income · YTD Oct 2026"], timeout_s=600, open_details=True)
 
 
 with sync_playwright() as p:

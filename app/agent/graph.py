@@ -540,6 +540,7 @@ def dispute_reply(mem: dict, user_id: str) -> tuple[str, list[str]]:
     """Answer to 'that's not right' / 'are you sure?': exactly what was used, and what can be changed."""
     u = mem["last_used"]
     period = u["period"] + (f" ({u['months']})" if u.get("months") else "")
+    other = "Mexico" if "Canada" in u["scope"] else "Canada"
     msg = ("Here is exactly what I used for the previous answer:\n\n"
            f"- **Measure:** {u['measure']}\n"
            f"- **Scope:** {u['scope']}\n"
@@ -547,7 +548,7 @@ def dispute_reply(mem: dict, user_id: str) -> tuple[str, list[str]]:
            f"- **Compared with:** {u['comparison_text']}\n"
            f"- **Source:** {u['source']}\n\n"
            "Every figure comes straight from the database; the SQL is under \"How I got this\" in the previous "
-           "answer. Which part should change? Pick one below, or type it, for example \"No, I meant Canada\" or "
+           f"answer. Which part should change? Pick one below, or type it, for example \"No, I meant {other}\" or "
            "\"use Q3 2026 instead\".")
     return msg, change_options(mem, user_id)
 

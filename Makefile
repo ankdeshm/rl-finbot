@@ -109,8 +109,8 @@ k8s-env: ## Write the dev pod's .env from deploy/k8s/dev.env (service names, no 
 k8s-ready: ## Tell the app container that the workspace is ready (it then starts Streamlit)
 	$(KUBECTL) -n $(NAMESPACE) exec $(DEV_POD) -c dev -- touch $(WS)/.app-ready
 
-OLLAMA_MODELS ?= qwen2.5-coder:14b llama3.1:8b gpt-oss:20b
-k8s-models: ## Pull the local LLMs into the Ollama pod (about 27 GB for the default three)
+OLLAMA_MODELS ?= qwen2.5-coder:14b gpt-oss:20b
+k8s-models: ## Pull the local LLMs into the Ollama pod (about 22 GB for the default two)
 	@for m in $(OLLAMA_MODELS); do $(KUBECTL) -n $(NAMESPACE) exec $(PREFIX)-ollama-0 -- ollama pull $$m; done
 
 k8s-sync: ## Copy the working tree into the dev pod workspace
