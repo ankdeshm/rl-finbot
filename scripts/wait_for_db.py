@@ -16,7 +16,7 @@ from app.db import mssql_url  # noqa: E402
 
 
 def main(timeout_s: int = 300) -> None:
-    db = env("DB_NAME", "rl_finbot")
+    db = env("DB_NAME", "iris")
     eng = create_engine(mssql_url(admin=True, database="master"), isolation_level="AUTOCOMMIT")
     start = time.time()
     while True:

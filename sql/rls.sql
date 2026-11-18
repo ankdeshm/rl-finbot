@@ -42,14 +42,20 @@ CREATE SECURITY POLICY rls.OrgAccessPolicy
     ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_pnl,
     ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_stats,
     ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.dim_employee,
-    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_employee_month
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_employee_month,
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_landing,
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.fact_landing_leaf,
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.landing_method,
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.landing_bu_profile,
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.landing_residual,
+    ADD FILTER PREDICATE rls.fn_org_access(bu_id) ON dbo.landing_mtd_snapshot
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 
 -- Read-only application role (the loader creates the login/user and adds it to this role)
-IF DATABASE_PRINCIPAL_ID(N'finbot_app_role') IS NULL
-    CREATE ROLE finbot_app_role AUTHORIZATION dbo;
+IF DATABASE_PRINCIPAL_ID(N'iris_app_role') IS NULL
+    CREATE ROLE iris_app_role AUTHORIZATION dbo;
 GO
-GRANT SELECT ON SCHEMA::dbo TO finbot_app_role;
-DENY INSERT, UPDATE, DELETE, ALTER, EXECUTE ON SCHEMA::dbo TO finbot_app_role;
+GRANT SELECT ON SCHEMA::dbo TO iris_app_role;
+DENY INSERT, UPDATE, DELETE, ALTER, EXECUTE ON SCHEMA::dbo TO iris_app_role;
 GO

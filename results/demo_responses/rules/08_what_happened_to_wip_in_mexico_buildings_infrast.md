@@ -1,50 +1,50 @@
 # What happened to WIP in Mexico Buildings & Infrastructure this year?
 
 - **Persona:** Group CFO
-- **Model:** `rules` · **status:** ok · **latency:** 0.1 s
+- **Model:** `rules` · **status:** ok · **latency:** 0.13 s
 - **Tool:** `get_trend` (chosen by `router_fallback`) · **numeric guardrail:** n/a (no LLM)
 
 ## Answer
 
-**WIP & UI monthly trend for Mexico · Buildings & Infrastructure, Jan 2026 - Oct 2026 (series: Actual, PY, Budget), USD.**
+**WIP & deferred income monthly trend for Mexico · Buildings & Infrastructure, Jan 2026 - Oct 2026 (series: Actual, PY, Budget), USD.**
 
-- Pattern of Actual: Jan 2026 - Jun 2026 total +USD 3.4M (positive every month); Jul 2026 - Oct 2026 total -USD 3.3M (negative every month)
-- Total Actual over Jan 2026 - Oct 2026: USD 108k; USD 556k below PY for the same months (USD 663k), unfavourable; USD 617k below Budget for the same months (USD 725k), unfavourable
-- Latest month Oct 2026: Actual -USD 26k, PY -USD 34k, Budget -USD 25k
+- Pattern of Actual: Jan 2026 - Jun 2026 total +USD 861k (positive every month); Jul 2026 - Oct 2026 total -USD 823k (negative every month)
+- Total Actual over Jan 2026 - Oct 2026: USD 39k; USD 155k below PY for the same months (USD 194k), unfavourable; USD 146k below Budget for the same months (USD 185k), unfavourable
+- Latest month Oct 2026: Actual -USD 6k, PY -USD 2k, Budget -USD 6k
 
 ## Table
 
 | Month | Actual | PY | Budget |
 |:---|---:|---:|---:|
-| Jan 2026 | 329 | (41) | (54) |
-| Feb 2026 | 584 | 100 | 137 |
-| Mar 2026 | 645 | 110 | 111 |
-| Apr 2026 | 591 | 130 | 118 |
-| May 2026 | 607 | 94 | 100 |
-| Jun 2026 | 617 | 54 | 82 |
-| Jul 2026 | (1,091) | 90 | 92 |
-| Aug 2026 | (1,129) | 97 | 106 |
-| Sep 2026 | (1,021) | 61 | 57 |
-| Oct 2026 | (26) | (34) | (25) |
+| Jan 2026 | 84 | (4) | (13) |
+| Feb 2026 | 161 | 27 | 32 |
+| Mar 2026 | 186 | 34 | 32 |
+| Apr 2026 | 120 | 24 | 28 |
+| May 2026 | 139 | 26 | 22 |
+| Jun 2026 | 171 | 27 | 25 |
+| Jul 2026 | (276) | 23 | 22 |
+| Aug 2026 | (285) | 23 | 27 |
+| Sep 2026 | (256) | 16 | 17 |
+| Oct 2026 | (6) | (2) | (6) |
 
 _USD k_
 
 ## Chart
 
-`line` - WIP & UI - Mexico · Buildings & Infrastructure (Jan 2026 - Oct 2026) ([interactive chart](08_what_happened_to_wip_in_mexico_buildings_infrast_chart.html))
+`line` - WIP & deferred income - Mexico · Buildings & Infrastructure (Jan 2026 - Oct 2026) ([interactive chart](08_what_happened_to_wip_in_mexico_buildings_infrast_chart.html))
 
 ## Filters, version and period used
 
 - Scope: Mexico · Buildings & Infrastructure
 - Period: Jan 2026 - Oct 2026 (Jan 2026 - Oct 2026)
 - Versions: Actual, PY, Budget
-- Currency: USD at B26 (constant budget rate)
-- As-of date: 2026-11-12 · row-level security: SQL Server SECURITY POLICY (SESSION_CONTEXT)
+- Currency: USD at constant budget rate
+- As-of date: 2026-11-16 · row-level security: SQL Server SECURITY POLICY (SESSION_CONTEXT)
 
 ## Follow-up questions
 
-1. Why did WIP & UI change vs last year for Mexico · Buildings & Infrastructure?
-2. Rank businesss in Mexico · Buildings & Infrastructure by WIP & UI this year
+1. Why did WIP & deferred income change vs last year for Mexico · Buildings & Infrastructure?
+2. Rank businesses in Mexico · Buildings & Infrastructure by WIP & deferred income this year
 3. Compare Budget vs FC3 vs Actual for Mexico · Buildings & Infrastructure
 
 ## Diagnostics
@@ -79,6 +79,9 @@ _USD k_
           "<empty>"
         ],
         "checked": 0,
+        "problems": [
+          "the answer was empty"
+        ],
         "draft": ""
       }
     ],
@@ -88,9 +91,9 @@ _USD k_
   },
   "errors": [],
   "timings": {
-    "preprocess": 0.006,
+    "preprocess": 0.009,
     "plan": 0.0,
-    "act": 0.09,
+    "act": 0.116,
     "write#1": 0.0
   }
 }

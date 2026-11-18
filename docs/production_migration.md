@@ -21,7 +21,7 @@ SQL views. Most of the work is therefore mapping the customer's tables to those 
 
 | Item | Production setting |
 |---|---|
-| Database login | A dedicated SQL login or Entra ID managed identity with SELECT on the reporting views only (as `finbot_reader` in `sql/rls.sql`) |
+| Database login | A dedicated SQL login or Entra ID managed identity with SELECT on the reporting views only (as `iris_reader` in `sql/rls.sql`) |
 | Row-level security | Replace `user_org_access` with the existing entitlement tables (dashboard user filters or a directory group → org-level mapping) and keep the SECURITY POLICY + `SESSION_CONTEXT` pattern |
 | User identity | The UI sets `user_id` from SSO (Entra ID / Okta) instead of the persona selector |
 | Secrets | Key Vault / Secret Manager; never in `.env` files on shared hosts |
@@ -40,16 +40,27 @@ SQL views. Most of the work is therefore mapping the customer's tables to those 
 
 ## 4. Conversation memory
 
-**Today (prototype).** Memory lives in the browser session: the scope, measure, period and comparison of the last answer, ranked items for "the first one", and the last five questions with what each used (the LLM planner sees these). Follow-ups, corrections ("no, I meant Mexico", "not YTD, full year 2025") and pushback ("that's not right") use it. "New conversation", a persona change or a page refresh clears it.
+**Today (prototype).** Within a conversation, memory holds the scope, measure, period and comparison of the
+last answer, ranked items for "the first one", and the last five questions with what each used (the LLM planner
+sees these). Follow-ups, corrections ("no, I meant Mexico", "not YTD, full year 2025") and pushback ("that's not
+right") use it.
 
-**Across conversations (production design, not built).** This needs a decision on retention and privacy first:
+Across conversations, IRIS keeps the **last 10 conversations per signed-in user** (`app/history/store.py`,
+tables `app.app_conversation`, `app.app_message`, `app.app_conversation_state`): every question, the full
+answer payload (text, table, chart, filters, SQL) and the conversation state with the sidebar filters.
+Reopening a conversation re-renders the stored answers without calling the LLM or the database and restores
+the context, so follow-ups continue. Old landing answers are labelled with their date and offer a refresh.
+The 11th conversation deletes the oldest unpinned one in the same transaction; every query filters by user.
+The sign-in is a demo (display name + shared access code).
+
+**For production** this needs decisions on retention and privacy:
 
 | Item | Proposal |
 |---|---|
-| Store | A table such as `conversation_turn(user_id, conversation_id, turn_no, question, used_json, created_at)` in the application database, keyed by the SSO user id |
-| What is stored | The question and what the answer used (measure, scope, period, comparison, tool), not the figures; reopening a conversation re-runs the questions on current data and current access rights |
-| Who sees it | Only the user (row-level security on the table); administrators through the audit log only |
-| Retention | Set by the customer (for example 30 or 90 days), purged automatically; users can delete their own history |
+| Identity | The SSO user id (Microsoft Entra ID / Active Directory) instead of the display name |
+| What is stored | Today the full payload, including figures, so a reopened answer shows what the user saw then. Alternative: store only the question and what was used, and re-run on current data and current access rights |
+| Who sees it | Only the user (every query filters by user id; row-level security on the tables can enforce it in the database too); administrators through the audit log only |
+| Retention | Set by the customer (for example 30 or 90 days, or the last N conversations as today), purged automatically; users can delete their own history |
 | LLM | Only the last few turns of the open conversation are sent, as today |
 | Privacy | Questions can name employees or groups of employees, so the store follows the employee-data rules above |
 
@@ -69,7 +80,7 @@ SQL views. Most of the work is therefore mapping the customer's tables to those 
 
 ## 7. Relationship to Tableau
 
-- **Tableau stays the system for standard dashboards.** The copilot covers the ad-hoc questions that today become dashboard requests.
+- **Tableau stays the system for standard dashboards.** IRIS covers the ad-hoc questions that today become dashboard requests.
 - **Same numbers.** Both read the same SQL Server views, so the figures match. A Tableau extract of the views can be reconciled automatically.
 - **Linking out.** Answers can link to the matching Tableau view by passing the resolved filters (org, period, version) as URL parameters.
 

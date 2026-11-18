@@ -6,7 +6,6 @@
 .pytest_cache
 scratch
 results
-hf_space
 deploy
 docs
 tests
@@ -14,3 +13,6 @@ data/*.parquet
 data/stories.json
 *.md
 !README.md
+# The UI renders the User Guide and its screenshots
+!docs/user_guide.md
+!docs/img

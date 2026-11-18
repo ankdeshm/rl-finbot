@@ -53,6 +53,13 @@ SESSIONS: list[tuple[str, list[str]]] = [
     ("us_country_head", ["How is operating profit YTD for Brazil?"]),
     ("us_country_head", ["How is the whole group doing this year vs budget?"]),
     ("env_pl_leader", ["Rank countries by operating margin this year"]),
+    ("group_cfo", ["What's the November landing for the United States?"]),
+    ("group_cfo", ["Which BUs are expected to miss budget this month?"]),
+    ("group_cfo", ["Explain the landing for CA-ENV-VAN-01"]),
+    ("group_cfo", ["What will YTD MAOP margin be through November including the landing?"]),
+    ("group_cfo", ["What is our profit % YTD?"]),
+    ("group_cfo", ["Which countries are in scope?"]),
+    ("us_country_head", ["Which countries are in scope?"]),
 ]
 
 
@@ -129,6 +136,8 @@ def main() -> None:
     args = ap.parse_args()
     out_dir = Path(args.out) / model_slug(args.model)
     out_dir.mkdir(parents=True, exist_ok=True)
+    for old in [*out_dir.glob("[0-9][0-9]_*"), out_dir / "index.md"]:   # the folder matches this run only
+        old.unlink(missing_ok=True)
     rows, i, t0 = [], 0, time.time()
     for persona, questions in SESSIONS:
         memory: dict = {}

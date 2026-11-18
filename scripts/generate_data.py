@@ -9,9 +9,18 @@ Generic monthly management P&L (line keys are internal; labels carry no codes):
 plus fictional employee-level data (codes only, no names) whose monthly hours, FTE and headcount add
 up exactly to the BU statistics.
 
+Billing follows a per-BU pattern (steady, quarter-end loaded, year-end loaded, seasonal with a March peak
+and an August dip, or lumpy project billing) whose intensity drifts mildly over the years, scaled by the
+month's working days (public holidays per country from the `holidays` package). Budgets and forecasts
+carry a BU-specific bias (optimistic or conservative planners); forecasts know the expected path of the
+business only partly and never the monthly noise.
+
 Writes one Parquet file per table into data/, plus
-  data/control_totals.parquet  intended subtotals per BU x month x version (scripts/reconcile.py)
-  data/stories.json            numbers behind the injected demo stories (docs/demo_stories.md)
+  data/control_totals.parquet        intended subtotals per BU x month x version (scripts/reconcile.py)
+  data/stories.json                  numbers behind the injected demo stories (docs/demo_stories.md)
+  data/eval_truth_open_month.parquet true month-end values of the open month (tests and backtests ONLY;
+                                     never loaded into the database or read by the app)
+  data/eval_truth_patterns.parquet   generator billing pattern and forecast bias per BU (tests ONLY)
 
 Storage rule: amounts are SIGNED (revenue +, cost -) and only LEAF accounts are stored.
 """
@@ -23,6 +32,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
+import holidays
 import numpy as np
 import pandas as pd
 
@@ -110,6 +120,28 @@ REGION_ORDER = ["US & Canada", "Mexico", "Northern South America", "Southern Sou
 STORY = {"a": ("United States", "Elevators & Pressure Vessels"), "b": ("Canada", "Environmental Lab Testing"),
          "c": ("Mexico", "Buildings & Infrastructure"), "d": ("Chile", "Metals & Minerals"),
          "e": ("Canada", "Power & Utilities")}
+# Landing demo stories (current-month landing, docs/demo_stories.md)
+LANDING_STORY = {
+    "momentum": ("United States", "Industry & Energy"),       # YoY momentum: lands above budget
+    "optimistic_forecast": ("Canada", "Industry & Energy"),   # optimistic planners: bias correction lands below FC
+    "shortfall": ("Mexico", "Consumer Products"),             # genuine shortfall from a downward trend
+    "lumpy": ("United States", "Buildings & Infrastructure"),  # lumpy project billing: wide P10-P90
+}
+
+# Billing pattern per BU: probabilities by product line (BUs of the landing stories are fixed below)
+PATTERNS = ("steady", "quarter_end", "year_end", "seasonal", "lumpy")
+PATTERN_MIX = {
+    "Elevators & Pressure Vessels":   {"steady": 0.70, "quarter_end": 0.30},
+    "Buildings & Infrastructure":     {"lumpy": 0.55, "quarter_end": 0.30, "steady": 0.15},
+    "Industry & Energy":              {"quarter_end": 0.50, "steady": 0.30, "lumpy": 0.20},
+    "Power & Utilities":              {"seasonal": 0.50, "quarter_end": 0.30, "steady": 0.20},
+    "Environmental Lab Testing":      {"seasonal": 0.70, "steady": 0.30},
+    "Consumer Products":              {"seasonal": 0.55, "year_end": 0.45},
+    "Certification & Sustainability": {"year_end": 0.70, "quarter_end": 0.30},
+    "Metals & Minerals":              {"steady": 0.50, "lumpy": 0.25, "quarter_end": 0.25},
+}
+# ASSUMPTION: billing is partly proportional to working days (elasticity 0.7)
+WD_ELASTICITY = 0.7
 
 # Cost profiles as share of production by business type (centre values; BUs vary around them)
 COST_PROFILES = {
@@ -274,6 +306,13 @@ class BU:
     ot: float
     hc_ratio: float
     amort: float
+    pattern: str = "steady"      # billing pattern class (generator truth)
+    qe: float = 0.0              # quarter-end uplift
+    ye: float = 0.0              # December uplift
+    season_amp: float = 0.0      # March peak / August dip amplitude
+    drift: float = 0.0           # yearly drift of the pattern intensity
+    lumpy_p: float = 0.0         # monthly probability of a large project billing
+    fc_bias: float = 0.0         # forecast bias (+ optimistic, - conservative)
 
     @property
     def btype(self) -> str:
@@ -329,7 +368,94 @@ def build_org(seed: int) -> list[BU]:
                 hc_ratio=float(rng.uniform(1.04, 1.09)),
                 amort=float(rng.uniform(0.005, 0.015)) if rng.random() < 0.35 else 0.0,
             ))
+    assign_patterns(bus, seed)
     return bus
+
+
+def assign_patterns(bus: list[BU], seed: int) -> None:
+    """Billing pattern, its parameters and the planners' forecast bias per BU (separate seeded stream)."""
+    rng = np.random.default_rng(seed + 2000)
+    for bu in bus:
+        mix = PATTERN_MIX[bu.pl]
+        bu.pattern = str(rng.choice(list(mix), p=np.array(list(mix.values())) / sum(mix.values())))
+        if (bu.country, bu.pl) == LANDING_STORY["lumpy"]:
+            bu.pattern = "lumpy"
+        if (bu.country, bu.pl) == LANDING_STORY["momentum"]:
+            bu.pattern = "quarter_end"
+        bu.qe = float(rng.uniform(0.25, 0.40))
+        bu.ye = float(rng.uniform(0.60, 1.00))
+        bu.season_amp = float(rng.uniform(0.15, 0.22))
+        bu.drift = float(rng.uniform(-0.08, 0.08))
+        if bu.pattern == "lumpy":
+            bu.noise = float(rng.uniform(0.10, 0.15))
+            bu.lumpy_p = float(rng.uniform(0.10, 0.16))
+        u = rng.random()
+        if u < 0.25:
+            bu.fc_bias = float(rng.uniform(0.04, 0.09))        # optimistic planners
+        elif u < 0.40:
+            bu.fc_bias = float(rng.uniform(-0.06, -0.025))     # conservative planners
+        else:
+            bu.fc_bias = float(rng.normal(0, 0.01))
+        if (bu.country, bu.pl) == LANDING_STORY["optimistic_forecast"]:
+            bu.fc_bias = float(rng.uniform(0.10, 0.12))
+
+
+def pattern_season(bu: BU, year: int) -> np.ndarray:
+    """12 monthly billing factors (mean 1) for the BU's pattern in `year`; the intensity drifts mildly."""
+    base = SEASON[bu.hemi]
+    k = max(0.3, 1.0 + bu.drift * (year - 2024))
+    if bu.pattern == "quarter_end":
+        qe = np.isin(np.arange(12), [2, 5, 8, 11])
+        s = (1 + 0.5 * (base - 1)) * np.where(qe, 1 + bu.qe * k, 1 - bu.qe * k / 2)
+    elif bu.pattern == "year_end":
+        s = (1 + 0.35 * (base - 1)).copy()
+        s[11] *= 1 + bu.ye * k
+        s[10] *= 1 + 0.15 * bu.ye * k
+    elif bu.pattern == "seasonal":
+        s = (1 + 0.5 * (base - 1)).copy()
+        s[2] *= 1 + bu.season_amp * k
+        s[1] *= 1 + 0.4 * bu.season_amp * k
+        s[7] *= 1 - 1.5 * bu.season_amp * k
+        s[6] *= 1 - 0.5 * bu.season_amp * k
+    elif bu.pattern == "lumpy":
+        s = 1 + 0.5 * (base - 1)
+    else:                                               # steady
+        s = 1 + 0.35 * (base - 1)
+    return s / s.mean()
+
+
+# --------------------------------------------------------------------------------------
+# Working-day calendar: Monday-Friday minus public holidays (holidays package), per country
+# --------------------------------------------------------------------------------------
+def calendar_frame(first_year: int, last_year: int) -> pd.DataFrame:
+    rows = []
+    days = pd.date_range(date(first_year, 1, 1), date(last_year, 12, 31), freq="D")
+    for country, spec in COUNTRIES.items():
+        hol = holidays.country_holidays(spec[0], years=range(first_year, last_year + 1))
+        for d in days:
+            dd = d.date()
+            rows.append((dd, country, bool(dd.weekday() < 5 and dd not in hol)))
+    return pd.DataFrame(rows, columns=["date", "country", "is_working_day"])
+
+
+def working_days_frame(cal: pd.DataFrame) -> pd.DataFrame:
+    c = cal.assign(month_key=[d.year * 100 + d.month for d in cal["date"]])
+    wd = c.groupby(["month_key", "country"], as_index=False)["is_working_day"].sum()
+    return wd.rename(columns={"is_working_day": "working_days"}).astype({"working_days": int})
+
+
+def wd_factors(wd: pd.DataFrame) -> dict[str, np.ndarray]:
+    """Per country and simulated month: (working days / average for that calendar month) ** elasticity."""
+    out = {}
+    for country in COUNTRIES:
+        s = wd[wd.country == country].set_index("month_key")["working_days"]
+        arr = np.array([float(s[(SIM_START + i // 12) * 100 + i % 12 + 1]) for i in range(N_SIM)])
+        typical = arr.reshape(-1, 12).mean(axis=0)
+        out[country] = (arr / np.tile(typical, N_SIM // 12)) ** WD_ELASTICITY
+    return out
+
+
+WD_FACTOR: dict[str, np.ndarray] = {}
 
 
 # --------------------------------------------------------------------------------------
@@ -345,7 +471,8 @@ def simulate_bu(rng: np.random.Generator, bu: BU):
     _, _, _, cpf, tax_rate, fx_vol, fx_bias, _ = COUNTRIES[bu.country]
 
     trend = bu.base / 12.0 * (1 + bu.growth) ** (t / 12.0)
-    prod = trend * season[m] * (1 + rng.normal(0, bu.noise, n))
+    pseason = np.concatenate([pattern_season(bu, SIM_START + y) for y in range(n // 12)])
+    mult = np.ones(n)                               # known structural changes in production (stories)
     pers_factor = np.ones(n)
     pers_adj = np.zeros(n)
     other_adj = np.zeros(n)
@@ -355,9 +482,21 @@ def simulate_bu(rng: np.random.Generator, bu: BU):
     # production -20% immediately, personnel adjusts only from May 2026 (3-month lag), with a
     # one-off restructuring (severance) charge in May 2026.
     if (bu.country, bu.pl) == STORY["b"]:
-        prod = np.where(t >= t_index(2026, 2), prod * 0.80, prod)
+        mult = np.where(t >= t_index(2026, 2), mult * 0.80, mult)
         pers_factor = np.where(t >= t_index(2026, 5), 0.84, 1.0)
         restructuring_extra[t_index(2026, 5)] = trend[t_index(2026, 5)] * prof["personnel"] * 0.16 * 3
+    # Landing story: United States Industry & Energy gains momentum from Jul 2025 (+0.8% a month)
+    if (bu.country, bu.pl) == LANDING_STORY["momentum"]:
+        k0 = t_index(2025, 7)
+        mult = mult * np.where(t >= k0, 1.008 ** (t - k0 + 1), 1.0)
+    # Landing story: Mexico Consumer Products declines from Jan 2026 (-1% a month); costs stay
+    if (bu.country, bu.pl) == LANDING_STORY["shortfall"]:
+        k0 = t_index(2026, 1)
+        mult = mult * np.where(t >= k0, 0.99 ** (t - k0 + 1), 1.0)
+
+    expected = trend * pseason * WD_FACTOR[bu.country] * mult
+    spikes = np.where(rng.random(n) < bu.lumpy_p, rng.uniform(1.35, 1.9, n), 1.0) if bu.lumpy_p else np.ones(n)
+    prod = expected * spikes * (1 + rng.normal(0, bu.noise, n))
 
     # Story (e): Canada Power & Utilities - steady margin improvement 2022-2026.
     if (bu.country, bu.pl) == STORY["e"]:
@@ -365,7 +504,7 @@ def simulate_bu(rng: np.random.Generator, bu: BU):
         pers_adj = 0.035 - 0.012 * years_since
         other_adj = 0.008 - 0.003 * years_since
 
-    prod_ratio = prod / (trend * season[m])
+    prod_ratio = prod / (trend * pseason)
     leaves: dict[str, np.ndarray] = {}
 
     # Revenue side: production -> intragroup -> revenue -> WIP & deferred income -> billing ------------
@@ -396,7 +535,7 @@ def simulate_bu(rng: np.random.Generator, bu: BU):
     bonus_b = np.where(m == 2, 1 + trueup_b[yi], 1.0)
     leaves["7A1"] = -p7a * 0.65
     leaves["7A2"] = -p7a * 0.08 * bonus_a
-    leaves["7A3"] = -p7a * 0.05 * season[m] * prod_ratio
+    leaves["7A3"] = -p7a * 0.05 * pseason * prod_ratio
     leaves["7A4"] = -p7a * 0.15 * (1 + rng.normal(0, 0.01, n))
     leaves["7A5"] = -p7a * 0.05 * (1 + rng.normal(0, 0.01, n))
     leaves["7A6"] = -p7a * 0.02 * (1 + rng.normal(0, 0.08, n))
@@ -446,7 +585,7 @@ def simulate_bu(rng: np.random.Generator, bu: BU):
     stats = {"fte": fte, "headcount": fte * bu.hc_ratio, "direct_fte": direct_fte,
              "available_hours": avail, "billable_hours": avail * util,
              "overtime_hours": avail * bu.ot * OT_SEASON[m] * np.clip(prod_ratio, 0.5, 1.5) ** 1.5}
-    return leaves, prod, stats
+    return leaves, prod, stats, expected
 
 
 def add_taxes(leaves: dict[str, np.ndarray], tax_rates: np.ndarray) -> None:
@@ -614,10 +753,12 @@ def build_budget(bus, truth, prod, stats):
         py = slice(t_index(year - 1, 1), t_index(year - 1, 1) + 12)
         out = slice(yo * 12, yo * 12 + 12)
         for b, bu in enumerate(bus):
-            seas = SEASON[bu.hemi] / 12
+            # planners phase the budget with the BU's billing pattern and the year's working days
+            prof_y = pattern_season(bu, year) * WD_FACTOR[bu.country][t_index(year, 1):t_index(year, 1) + 12]
+            seas = prof_y / prof_y.sum()
             g = PRODUCT_LINES[bu.pl]["growth"]
             p_py = prod[b, py].sum()
-            bp = p_py * (1 + g + 0.015) * seas
+            bp = p_py * (1 + g + 0.015) * (1 + 0.5 * bu.fc_bias) * seas
             igr = bp * truth["4.1"][b, py].sum() / p_py
             igs = bp * truth["5.1"][b, py].sum() / p_py
             br = bp - igr - igs
@@ -662,6 +803,9 @@ def build_budget(bus, truth, prod, stats):
 def main() -> None:
     seed = int(CFG["seed"])
     DATA.mkdir(parents=True, exist_ok=True)
+    calendar = calendar_frame(SIM_START, LAST_YEAR)
+    working_days = working_days_frame(calendar)
+    WD_FACTOR.update(wd_factors(working_days))
     bus = build_org(seed)
     nb = len(bus)
     rng = np.random.default_rng(seed)
@@ -669,13 +813,15 @@ def main() -> None:
 
     truth = {c: np.zeros((nb, N_SIM)) for c in LEAF_CODES}
     prod = np.zeros((nb, N_SIM))
+    expected = np.zeros((nb, N_SIM))
     stats = {k: np.zeros((nb, N_SIM)) for k in STAT_KEYS}
     for b, bu in enumerate(bus):
-        leaves, p, st = simulate_bu(rng, bu)
+        leaves, p, st, ex = simulate_bu(rng, bu)
         for c in LEAF_CODES:
             if c in leaves:
                 truth[c][b] = leaves[c]
         prod[b] = p
+        expected[b] = ex
         for k in STAT_KEYS:
             stats[k][b] = st[k]
     add_taxes(truth, tax_rates)
@@ -715,24 +861,39 @@ def main() -> None:
     sim_out = slice(t_index(FIRST_YEAR, 1), t_index(FIRST_YEAR, 1) + N_OUT)
     truth_out = {c: truth[c][:, sim_out] for c in LEAF_CODES}
     stats_out = {k: stats[k][:, sim_out] for k in STAT_KEYS}
+    prod_out, expected_out = prod[:, sim_out], expected[:, sim_out]
     ly0, lm0 = last_closed_month(AS_OF)
     n_act = (ly0 - FIRST_YEAR) * 12 + lm0
     dim_employee, fact_employee_month, emp_stats = build_employees(bus, stats_out, n_act, seed)
     for k in STAT_KEYS:                                # Actual BU statistics = employee totals
         stats_out[k][:, :n_act] = emp_stats[k]
+    # Forecasts: reforecast months blend the expected path (what planners can know) with the budget,
+    # carry the BU's planner bias and forecast noise; production-driven lines follow the forecast
+    # production, the other lines blend Actual and Budget as before. Monthly noise and project spikes
+    # are never known in advance.
+    fc_bias = np.array([bu.fc_bias for bu in bus])[:, None]
+    fc_noise = {k: float(v) for k, v in (CFG.get("forecast_noise_sd") or {}).items()}
+    prod_driven = {"1.1", "1.2", "4.1", "5.1"} | VARIABLE_COSTS
     forecasts, fc_stats = {}, {}
     for _vid, vname, k_act, is_fc in VERSIONS:
         if not is_fc:
             continue
         a = FC_ACCURACY[vname]
+        sd = fc_noise.get(vname, 0.03)
+        fc_prod = (a * expected_out + (1 - a) * bud_prod) * (1 + fc_bias) * (1 + rng.normal(0, sd, prod_out.shape))
+        ratio = fc_prod / np.where(np.abs(prod_out) > 1e-9, prod_out, 1e-9)
         fc = {}
         for c in LEAF_CODES:
             arr = truth_out[c].copy()
             for yo in range(N_OUT // 12):
                 tail = slice(yo * 12 + k_act, yo * 12 + 12)
-                arr[:, tail] = (a * truth_out[c][:, tail] + (1 - a) * bud[c][:, tail]) * (
-                    1 + rng.normal(0, 0.01, arr[:, tail].shape))
+                if c in prod_driven:
+                    arr[:, tail] = truth_out[c][:, tail] * ratio[:, tail]
+                else:
+                    arr[:, tail] = (a * truth_out[c][:, tail] + (1 - a) * bud[c][:, tail]) * (
+                        1 + rng.normal(0, 0.01, arr[:, tail].shape))
             fc[c] = arr
+        add_taxes(fc, tax_rates)
         st = {}
         for key in STAT_KEYS:
             arr = stats_out[key].copy()
@@ -825,13 +986,30 @@ def main() -> None:
         ctrl(vname, forecasts[vname], None, all_months)
     control = pd.concat(ctrl_parts, ignore_index=True)
 
+    first_day = date(FIRST_YEAR, 1, 1)
+    dim_calendar = calendar[calendar["date"] >= first_day].reset_index(drop=True)
+    working_days_out = working_days[working_days["month_key"] >= FIRST_YEAR * 100 + 1].reset_index(drop=True)
     tables = {"dim_org": dim_org, "dim_account": dim_account, "dim_version": dim_version,
               "dim_period": dim_period, "fact_pnl": fact_pnl, "fact_stats": fact_stats,
               "app_user": app_user, "user_org_access": user_org_access,
-              "dim_employee": dim_employee, "fact_employee_month": fact_employee_month}
+              "dim_employee": dim_employee, "fact_employee_month": fact_employee_month,
+              "dim_calendar": dim_calendar, "working_days": working_days_out}
     for name, df in tables.items():
         df.to_parquet(DATA / f"{name}.parquet", index=False)
     control.to_parquet(DATA / "control_totals.parquet", index=False)
+
+    # Hidden truth for tests and backtests ONLY (never loaded into the database, never read by the app):
+    # the true month-end values of the open month and the generator's pattern / bias per BU.
+    open_idx = int(np.argmax(~actual_mask)) if (~actual_mask).any() else None
+    if open_idx is not None:
+        open_key = int(month_keys[open_idx])
+        pd.DataFrame([{"month_key": open_key, "bu_id": int(bu_ids[b]), "account_id": LEAF_ID[c],
+                       "amount_usd": round(float(truth_out[c][b, open_idx]), 2)}
+                      for b in range(nb) for c in LEAF_CODES]).to_parquet(
+            DATA / "eval_truth_open_month.parquet", index=False)
+    pd.DataFrame([{"bu_id": bu.bu_id, "pattern": bu.pattern, "fc_bias": round(bu.fc_bias, 4),
+                   "landing_story": next((k for k, v in LANDING_STORY.items() if v == (bu.country, bu.pl)), None)}
+                  for bu in bus]).to_parquet(DATA / "eval_truth_patterns.parquet", index=False)
     stories = compute_stories(tables)
     (DATA / "stories.json").write_text(json.dumps(stories, indent=2, default=str))
 

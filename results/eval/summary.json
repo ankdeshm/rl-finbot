@@ -1,135 +1,109 @@
 {
   "ollama/gpt-oss:20b": {
-    "questions": 71,
+    "questions": 135,
     "status": [
       1.0,
-      71,
-      71
+      135,
+      135
     ],
     "tool": [
       1.0,
-      67,
-      67
+      127,
+      127
     ],
     "llm_tool": [
-      1.0,
-      67,
-      67
+      0.9921259842519685,
+      126,
+      127
     ],
     "data": [
-      1.0,
-      67,
-      67
+      0.9838709677419355,
+      122,
+      124
     ],
     "text": [
-      1.0,
-      67,
-      67
+      0.9918032786885246,
+      121,
+      122
     ],
     "rls": [
       1.0,
-      5,
-      5
+      11,
+      11
     ],
-    "guard_first": 0.9552238805970149,
-    "guard_retry": 0.04477611940298507,
+    "guard_first": 0.9291338582677166,
+    "guard_retry": 0.05511811023622047,
     "guard_redacted": 0.0,
-    "guard_template": 0.0,
-    "p50": 14.47,
-    "p95": 27.64,
-    "crashes": 0
-  },
-  "ollama/llama3.1:8b": {
-    "questions": 71,
-    "status": [
-      1.0,
-      71,
-      71
-    ],
-    "tool": [
-      0.9850746268656716,
-      66,
-      67
-    ],
-    "llm_tool": [
-      0.9701492537313433,
-      65,
-      67
-    ],
-    "data": [
-      1.0,
-      67,
-      67
-    ],
-    "text": [
-      1.0,
-      67,
-      67
-    ],
-    "rls": [
-      1.0,
-      5,
-      5
-    ],
-    "guard_first": 0.7910447761194029,
-    "guard_retry": 0.19402985074626866,
-    "guard_redacted": 0.014925373134328358,
-    "guard_template": 0.0,
-    "p50": 12.14,
-    "p95": 20.53,
+    "guard_template": 0.015748031496062992,
+    "llm_answers": 127,
+    "flag_numbers": 6,
+    "flag_month": 1,
+    "flag_scope": 0,
+    "flag_reasons": 0,
+    "dropped_sentences": 20,
+    "dropped_answers": 20,
+    "p50": 15.28,
+    "p95": 26.22,
     "crashes": 0
   },
   "ollama/qwen2.5-coder:14b": {
-    "questions": 71,
+    "questions": 135,
     "status": [
       1.0,
-      71,
-      71
+      135,
+      135
     ],
     "tool": [
       1.0,
-      67,
-      67
+      127,
+      127
     ],
     "llm_tool": [
-      0.9552238805970149,
-      64,
-      67
+      0.9921259842519685,
+      126,
+      127
     ],
     "data": [
       1.0,
-      67,
-      67
+      124,
+      124
     ],
     "text": [
       1.0,
-      67,
-      67
+      122,
+      122
     ],
     "rls": [
       1.0,
-      5,
-      5
+      11,
+      11
     ],
-    "guard_first": 0.7910447761194029,
-    "guard_retry": 0.11940298507462686,
-    "guard_redacted": 0.029850746268656716,
-    "guard_template": 0.05970149253731343,
-    "p50": 24.07,
-    "p95": 36.97,
+    "guard_first": 0.8661417322834646,
+    "guard_retry": 0.03937007874015748,
+    "guard_redacted": 0.015748031496062992,
+    "guard_template": 0.07874015748031496,
+    "llm_answers": 127,
+    "flag_numbers": 17,
+    "flag_month": 1,
+    "flag_scope": 0,
+    "flag_reasons": 0,
+    "dropped_sentences": 36,
+    "dropped_answers": 33,
+    "p50": 25.55,
+    "p95": 37.48,
     "crashes": 0
   },
   "rules": {
-    "questions": 71,
+    "questions": 135,
     "status": [
       1.0,
-      71,
-      71
+      135,
+      135
     ],
     "tool": [
       1.0,
-      67,
-      67
+      127,
+      127
     ],
     "llm_tool": [
       null,
@@ -138,25 +112,32 @@
     ],
     "data": [
       1.0,
-      67,
-      67
+      124,
+      124
     ],
     "text": [
       1.0,
-      67,
-      67
+      122,
+      122
     ],
     "rls": [
       1.0,
-      5,
-      5
+      11,
+      11
     ],
     "guard_first": null,
     "guard_retry": null,
     "guard_redacted": null,
     "guard_template": null,
-    "p50": 0.12,
-    "p95": 0.37,
+    "llm_answers": 0,
+    "flag_numbers": 0,
+    "flag_month": 0,
+    "flag_scope": 0,
+    "flag_reasons": 0,
+    "dropped_sentences": 0,
+    "dropped_answers": 0,
+    "p50": 0.15,
+    "p95": 0.53,
     "crashes": 0
   }
 }

@@ -15,6 +15,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     Date,
+    DateTime,
     Integer,
     MetaData,
     Numeric,
@@ -145,17 +146,122 @@ fact_employee_month = Table(
     Column("is_leaver", Boolean, nullable=False),
 )
 
+# Working-day calendar (public holidays per country)
+dim_calendar = Table(
+    "dim_calendar", metadata,
+    Column("date", Date, primary_key=True),
+    Column("country", Unicode(50), primary_key=True),
+    Column("is_working_day", Boolean, nullable=False),
+)
+
+working_days = Table(
+    "working_days", metadata,
+    Column("month_key", Integer, primary_key=True, autoincrement=False),
+    Column("country", Unicode(50), primary_key=True),
+    Column("working_days", Integer, nullable=False),
+)
+
+# Current-month landing (written by `make landing`, read under RLS)
+fact_landing = Table(
+    "fact_landing", metadata,
+    Column("snapshot_date", Date, primary_key=True),
+    Column("month_key", Integer, primary_key=True, autoincrement=False),
+    Column("bu_id", Integer, primary_key=True, autoincrement=False),
+    Column("measure", Unicode(40), primary_key=True),
+    Column("p10", Numeric(18, 6), nullable=True),
+    Column("p50", Numeric(18, 6), nullable=True),
+    Column("p90", Numeric(18, 6), nullable=True),
+    Column("method_weights_json", Unicode(400), nullable=True),
+    Column("pattern_class", Unicode(20), nullable=False),
+)
+
+fact_landing_leaf = Table(
+    "fact_landing_leaf", metadata,
+    Column("snapshot_date", Date, primary_key=True),
+    Column("month_key", Integer, primary_key=True, autoincrement=False),
+    Column("bu_id", Integer, primary_key=True, autoincrement=False),
+    Column("account_id", Integer, primary_key=True, autoincrement=False),
+    Column("amount_usd", Numeric(18, 2), nullable=False),
+)
+
+landing_method = Table(
+    "landing_method", metadata,
+    Column("snapshot_date", Date, primary_key=True),
+    Column("month_key", Integer, primary_key=True, autoincrement=False),
+    Column("bu_id", Integer, primary_key=True, autoincrement=False),
+    Column("method", Unicode(30), primary_key=True),
+    Column("prediction", Numeric(18, 2), nullable=True),
+    Column("weight", Numeric(9, 6), nullable=True),
+    Column("backtest_wape", Numeric(9, 6), nullable=True),
+    Column("detail_json", Unicode(400), nullable=True),
+)
+
+landing_bu_profile = Table(
+    "landing_bu_profile", metadata,
+    Column("snapshot_date", Date, primary_key=True),
+    Column("bu_id", Integer, primary_key=True, autoincrement=False),
+    Column("pattern_class", Unicode(20), nullable=False),
+    Column("n_months", Integer, nullable=False),
+    Column("quarter_end_share", Numeric(9, 6), nullable=True),
+    Column("december_share", Numeric(9, 6), nullable=True),
+    Column("cv", Numeric(9, 6), nullable=True),
+    Column("seasonal_amplitude", Numeric(9, 6), nullable=True),
+    Column("shrink_weight", Numeric(9, 6), nullable=True),
+    Column("seasonal_index_json", Unicode(300), nullable=True),
+)
+
+landing_residual = Table(
+    "landing_residual", metadata,
+    Column("snapshot_date", Date, primary_key=True),
+    Column("bu_id", Integer, primary_key=True, autoincrement=False),
+    Column("origin_month_key", Integer, primary_key=True, autoincrement=False),
+    Column("log_error", Numeric(12, 8), nullable=False),
+)
+
+landing_run = Table(
+    "landing_run", metadata,
+    Column("snapshot_date", Date, primary_key=True),
+    Column("month_key", Integer, nullable=False),
+    Column("run_at", DateTime, nullable=False),
+    Column("n_bus", Integer, nullable=False),
+    Column("seconds", Numeric(9, 2), nullable=False),
+    Column("mtd_used", Boolean, nullable=False),
+    Column("notes", Unicode(400), nullable=True),
+)
+
+landing_backtest_metric = Table(
+    "landing_backtest_metric", metadata,
+    Column("run_date", Date, primary_key=True),
+    Column("scope_type", Unicode(20), primary_key=True),
+    Column("scope_value", Unicode(100), primary_key=True),
+    Column("measure", Unicode(40), primary_key=True),
+    Column("method", Unicode(30), primary_key=True),
+    Column("metric", Unicode(20), primary_key=True),
+    Column("value", Numeric(12, 6), nullable=True),
+    Column("n", Integer, nullable=False),
+)
+
+landing_mtd_snapshot = Table(
+    "landing_mtd_snapshot", metadata,
+    Column("snapshot_date", Date, primary_key=True),
+    Column("bu_id", Integer, primary_key=True, autoincrement=False),
+    Column("mtd_billing", Numeric(18, 2), nullable=False),
+)
+
+LANDING_TABLES = ["fact_landing", "fact_landing_leaf", "landing_method", "landing_bu_profile", "landing_residual",
+                  "landing_run", "landing_backtest_metric", "landing_mtd_snapshot"]
+
 TABLE_LOAD_ORDER = [
     "dim_org", "dim_account", "dim_version", "dim_period",
     "app_user", "user_org_access", "fact_pnl", "fact_stats",
-    "dim_employee", "fact_employee_month",
+    "dim_employee", "fact_employee_month", "dim_calendar", "working_days",
 ]
 
 QUERY_TIMEOUT_SECONDS = 30
 
 
 def mssql_url(admin: bool = False, database: str | None = None) -> URL:
-    user = env("MSSQL_SA_USER", "sa") if admin else env("MSSQL_APP_USER", "finbot_reader")
+    user = env("MSSQL_SA_USER", "sa") if admin else env("MSSQL_APP_USER", "iris_reader")
     password = env("MSSQL_SA_PASSWORD") if admin else env("MSSQL_APP_PASSWORD")
     query = {
         "driver": env("ODBC_DRIVER", "ODBC Driver 18 for SQL Server"),
@@ -168,13 +274,13 @@ def mssql_url(admin: bool = False, database: str | None = None) -> URL:
         password=password,
         host=env("DB_HOST", "localhost"),
         port=int(env("DB_PORT", "1433")),
-        database=database if database is not None else env("DB_NAME", "rl_finbot"),
+        database=database if database is not None else env("DB_NAME", "iris"),
         query=query,
     )
 
 
 def duckdb_path():
-    return ROOT / env("DUCKDB_PATH", "data/rl_finbot.duckdb")
+    return ROOT / env("DUCKDB_PATH", "data/iris.duckdb")
 
 
 @lru_cache(maxsize=32)

@@ -56,7 +56,7 @@ def wait_for_server(timeout_s: int = 180) -> None:
 
 
 def ensure_database() -> None:
-    db = env("DB_NAME", "rl_finbot")
+    db = env("DB_NAME", "iris")
     eng = create_engine(mssql_url(admin=True, database="master"), isolation_level="AUTOCOMMIT")
     with eng.connect() as c:
         c.execute(text(f"IF DB_ID(N'{db}') IS NULL CREATE DATABASE [{db}]"))
@@ -78,7 +78,7 @@ def bulk_insert(raw_conn: pyodbc.Connection, table: str, df: pd.DataFrame) -> No
 
 
 def ensure_app_login(raw_conn: pyodbc.Connection) -> None:
-    user = env("MSSQL_APP_USER", "finbot_reader")
+    user = env("MSSQL_APP_USER", "iris_reader")
     pwd = env("MSSQL_APP_PASSWORD")
     if not pwd:
         raise SystemExit("MSSQL_APP_PASSWORD is not set")
@@ -94,7 +94,7 @@ def ensure_app_login(raw_conn: pyodbc.Connection) -> None:
     cur.execute(
         f"IF DATABASE_PRINCIPAL_ID(N'{user}') IS NULL CREATE USER [{user}] FOR LOGIN [{user}];"
     )
-    cur.execute(f"ALTER ROLE finbot_app_role ADD MEMBER [{user}];")
+    cur.execute(f"ALTER ROLE iris_app_role ADD MEMBER [{user}];")
     raw_conn.commit()
     print(f"  app login [{user}] ready (SELECT-only, subject to RLS)")
 
@@ -118,6 +118,8 @@ def main() -> None:
         run_script(raw.driver_connection, post, "schema.sql (post-load FKs + columnstore)")
         run_script(raw.driver_connection, (ROOT / "sql" / "views.sql").read_text(), "views.sql")
         run_script(raw.driver_connection, (ROOT / "sql" / "rls.sql").read_text(), "rls.sql")
+        run_script(raw.driver_connection, (ROOT / "sql" / "app_tables.sql").read_text(),
+                   "app_tables.sql (conversation history, kept across reloads)")
         ensure_app_login(raw.driver_connection)
         cur = raw.driver_connection.cursor()
         print("Row counts (as dbo, RLS bypassed for admin):")

@@ -331,7 +331,7 @@ def latest_forecast(year: int, as_of: date | None = None) -> str | None:
 def normalize_version(v: str | None) -> str | None:
     if not v:
         return None
-    s = str(v).strip().lower().replace(" ", "").replace("_", "")
+    s = str(v).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
     mapping = {
         "actual": "Actual", "actuals": "Actual", "act": "Actual", "cy": "Actual",
         "budget": "Budget", "bud": "Budget", "bgt": "Budget", "plan": "Budget",
@@ -340,6 +340,7 @@ def normalize_version(v: str | None) -> str | None:
         "latestfc": "LatestFC", "latestforecast": "LatestFC", "forecast": "LatestFC", "fc": "LatestFC",
         "currentforecast": "LatestFC", "outlook": "LatestFC", "le": "LatestFC",
         "py": "PY", "prioryear": "PY", "lastyear": "PY", "previousyear": "PY", "ly": "PY",
+        "landing": "Landing", "currentmonthlanding": "Landing", "monthendlanding": "Landing", "lnd": "Landing",
     }
     return mapping.get(s)
 
@@ -347,10 +348,15 @@ def normalize_version(v: str | None) -> str | None:
 @dataclass(frozen=True)
 class Series:
     """One column of numbers: a version over a set of months."""
-    label: str          # e.g. "Actual", "PY", "Budget", "FC2"
-    version: str        # database version name
+    label: str          # e.g. "Actual", "PY", "Budget", "FC2", "Landing"
+    version: str        # database version name ("LANDING" = stored landing P50, open month only)
     period: Period
     months: tuple[int, ...]
+
+
+def open_month(as_of: date | None = None) -> int:
+    """The month after the last closed month: the current-month landing is computed for it."""
+    return add_months(last_closed_month(as_of), 1)
 
 
 def resolve_series(primary_version: str, period: Period, comparisons: list[str],
@@ -363,12 +369,18 @@ def resolve_series(primary_version: str, period: Period, comparisons: list[str],
     if primary_version == "LatestFC":
         primary_version = latest_forecast(period.year, as_of) or "Budget"
     eff = period
+    if primary_version == "Landing":
+        eff = Period("MONTH", open_month(as_of))
+        if period.months() != eff.months():
+            notes.append(f"The landing exists for the open month only ({month_label(eff.end_key)}); "
+                         f"all columns cover {eff.label()}.")
     if primary_version == "Actual" and period.end_key > last:
         eff = period.truncate(last)
         if eff.months()[-1] <= last and eff != period:
             notes.append(f"{period.label()} is not complete: Actuals are available to "
                          f"{month_label(last)}, so all columns cover {eff.label()} (like-for-like).")
-    series = [Series(primary_version, primary_version, eff, tuple(eff.months()))]
+    db_version = "LANDING" if primary_version == "Landing" else primary_version
+    series = [Series(primary_version, db_version, eff, tuple(eff.months()))]
     seen = {primary_version}
     for c in comparisons:
         cn = normalize_version(c) or c
@@ -377,6 +389,13 @@ def resolve_series(primary_version: str, period: Period, comparisons: list[str],
             if "PY" not in seen:
                 series.append(Series("PY", "Actual", p, tuple(p.months())))
                 seen.add("PY")
+            continue
+        if cn == "Landing":
+            if eff.months() == [open_month(as_of)] and "Landing" not in seen:
+                series.append(Series("Landing", "LANDING", eff, tuple(eff.months())))
+                seen.add("Landing")
+            elif "Landing" not in seen:
+                notes.append(f"The landing exists for {month_label(open_month(as_of))} only.")
             continue
         if cn == "LatestFC":
             fc = latest_forecast(eff.year, as_of)

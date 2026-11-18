@@ -1,6 +1,6 @@
 [project]
-name = "rl-finbot"
-version = "0.1.0"
+name = "iris"
+version = "1.0.0"
 description = "Conversational financial-analytics chatbot prototype for a fictional TIC company (RL Group). Synthetic data."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
@@ -25,6 +25,8 @@ dependencies = [
     "openpyxl>=3.1",
     "google-auth>=2.30",
     "tabulate>=0.9",
+    "statsmodels>=0.14.4",
+    "holidays>=0.60",
 ]
 
 [dependency-groups]

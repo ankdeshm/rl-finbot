@@ -179,13 +179,18 @@ ratios:
     {name: Gross margin, num: gross_profit, den: production, format: pct, favorable: up,
      synonyms: [gross margin, gross margin %, gp margin, gross profit margin]}
   maop_margin_revenue:
-    {name: Operating margin (on revenue), num: maop, den: revenue, format: pct, favorable: up,
-     synonyms: [operating margin, operating profit margin, op margin, maop margin, margin, margins, mop margin,
-                profit margin, maop %, aop margin, operating margin on revenue,
-                maop margin on revenue, margin on revenue, return on sales]}
+    {name: Operating margin on revenue, num: maop, den: revenue, format: pct, favorable: up,
+     synonyms: [operating margin on revenue, operating profit margin on revenue, margin on revenue,
+                maop margin on revenue, mop margin on revenue, profit margin on revenue, op margin on revenue,
+                maop / revenue, maop/revenue, mop / revenue, mop/revenue, operating profit / revenue,
+                operating profit as % of revenue, profit % of revenue, revenue margin, return on sales]}
   maop_margin_production:
-    {name: Operating margin (on production), num: maop, den: production, format: pct, favorable: up,
-     synonyms: [operating margin on production, margin on production, production margin, maop margin on production]}
+    {name: Operating margin on production, num: maop, den: production, format: pct, favorable: up,
+     synonyms: [operating margin on production, operating profit margin on production, margin on production,
+                maop margin on production, mop margin on production, profit margin on production,
+                op margin on production, maop / production, maop/production, mop / production, mop/production,
+                operating profit / production, operating profit as % of production, profit % of production,
+                production margin]}
   management_op_margin:
     {name: EBIT margin (on revenue), num: management_op, den: revenue, format: pct, favorable: up,
      synonyms: [ebit margin, operating income margin, management op margin, management operating margin]}
@@ -219,6 +224,18 @@ ratios:
     {name: Overtime ratio (overtime / available hours), num: overtime_hours, den: available_hours, format: pct,
      favorable: down,
      synonyms: [overtime ratio, overtime %, overtime rate, overtime share, overtime]}
+
+# Generic wording without a base ("profit %", "margin", "MAOP %") means BOTH operating margins, shown
+# side by side; it is not a third definition. Base-specific wording maps to one ratio above.
+ratio_pairs:
+  operating_margins:
+    name: Operating margins (on revenue and on production)
+    members: [maop_margin_revenue, maop_margin_production]
+    synonyms: [operating margin, operating margins, operating profit margin, operating profit margins, op margin,
+               maop margin, maop margins, maop %, maop percent, maop percentage, mop %, mop margin, mop percentage,
+               aop margin, profit %, profit percent, profit percentage, profit margin, profit margins, margin,
+               margins, ebit-like margin, ebit like margin, operating profit %, operating profit percentage,
+               profitability, both margins]
 
 # KPI cockpit: operational profitability (direct margin drivers)
 cockpit:

@@ -93,6 +93,7 @@ class AgentState(TypedDict, total=False):
     timings: dict
     llm_calls: list
     errors: list
+    ui_filters: dict
 
 
 FOLLOWUP_RX = re.compile(r"^\s*(now|and|what about|how about|same|also|ok|okay|then|split|break|drill|"
@@ -177,7 +178,8 @@ def merge_context(res: Resolution, mem: dict, followup: bool) -> dict:
     m = {"org_filter": dict(res.org_filter), "metric": res.metric, "ratio": res.ratio, "metrics": res.metrics,
          "period": res.period, "period_is_range": res.period_is_range, "versions": list(res.versions),
          "comparisons": list(res.comparisons), "level_hint": res.level_hint, "top_n": res.top_n,
-         "ascending": res.ascending, "intents": list(res.intents), "tool": None, "followup": followup}
+         "ascending": res.ascending, "intents": list(res.intents), "tool": None, "followup": followup,
+         "both_margins": res.both_margins}
     if not followup:
         return m
     if res.org_filter and SCOPE_RESET_RX.search(res.clean_text or res.text or ""):
@@ -200,6 +202,7 @@ def merge_context(res: Resolution, mem: dict, followup: bool) -> dict:
         m["org_filter"] = dict(mem.get("org_filter") or {})
     if not res.metric:
         m["metric"], m["ratio"] = mem.get("metric"), mem.get("ratio")
+        m["both_margins"] = bool(mem.get("both_margins"))
         if m["metric"] and m["metric"] != m["ratio"] and registry().get_metric(m["metric"]) is not None:
             m["metrics"] = [m["metric"]]        # the tools read `metrics`: keeps the P&L line asked about earlier
     if not res.period:
@@ -225,9 +228,53 @@ def _period_text(p: dict | None) -> str:
     return p["label"]
 
 
+YTD_LANDING_RX = re.compile(r"\b(ytd|year[- ]to[- ]date|qtd|quarter[- ]to[- ]date|through|thru|till|until|up to|"
+                            r"including (the )?landing|incl\.? (the )?landing|with (the )?landing|full[- ]year|fy|"
+                            r"year[- ]end|outlook|so far)\b", re.I)
+MISS_RX = re.compile(r"\b(miss|missing|beat|exceed|short|shortfall|below|above|behind|ahead|rank|top|bottom|worst|best|"
+                     r"which (bus?|business units?|businesses|countries|product lines|regions))\b", re.I)
+EXPLAIN_RX = re.compile(r"\b(why|explain|how (is|was|did|does) .{0,30}(calculat|comput|built|work|estimat)|method|"
+                        r"methodology|drivers?|how do you (calculate|compute|estimate))\b", re.I)
+
+
+def route_landing(mg: dict, q: str) -> dict:
+    org_txt = org_label(mg["org_filter"]) if mg.get("org_filter") else ""
+    metric = mg.get("ratio") or mg.get("metric")
+    both = bool(mg.get("both_margins"))
+    p = mg.get("period") or {}
+    if YTD_LANDING_RX.search(q) or p.get("type") in ("YTD", "QTD", "FY"):
+        ptype = "FY" if re.search(r"\b(full[- ]year|fy|year[- ]end|outlook)\b", q, re.I) else \
+            ("QTD" if re.search(r"\b(qtd|quarter[- ]to[- ]date)\b", q, re.I) else "YTD")
+        return {"name": "get_ytd_with_landing", "arguments": {
+            "metric_or_ratio": "operating_margins" if both else (metric or "revenue"), "org": org_txt,
+            "through_month": "", "period_type": ptype, "comparisons": ["PY", "Budget", "LatestFC"]}}
+    if MISS_RX.search(q) or "rank" in (mg.get("intents") or []) or mg.get("level_hint"):
+        level = mg.get("level_hint") or "l6_bu"
+        return {"name": "rank_landing", "arguments": {
+            "metric": metric if metric and not both else "billing", "org_level": level, "parent_filter": org_txt,
+            "top_n": mg.get("top_n") or 10,
+            "sort_by": "gap_vs_forecast" if re.search(r"\bforecast\b", q, re.I) else "gap_vs_budget"}}
+    if EXPLAIN_RX.search(q):
+        return {"name": "explain_landing", "arguments": {"org": org_txt}}
+    month = ""
+    if p.get("type") == "MONTH":
+        month = f"{p['end'] // 100}-{p['end'] % 100:02d}"
+    measures = ["profit %"] if both else ([metric] if metric else [])
+    return {"name": "get_landing", "arguments": {"org": org_txt, "measures": measures, "month": month}}
+
+
 def route_deterministic(mg: dict) -> dict:
     """Rule-based tool choice used as safety net when the LLM does not return a usable call."""
     intents = set(mg.get("intents") or [])
+    q = mg.get("question") or ""
+    if "catalog" in intents:
+        from app.semantic.catalog import kind_from_text  # noqa: WPS433
+
+        parent = org_label(mg["org_filter"]) if mg.get("org_filter") and not mg.get("org_from_sidebar") else ""
+        return {"name": "describe_catalog", "arguments": {"kind": kind_from_text(q), "parent_filter": parent}}
+    if "landing" in intents or (mg.get("tool") in ("get_landing", "get_ytd_with_landing", "rank_landing",
+                                                   "explain_landing") and not intents):
+        return route_landing(mg, q)
     metric = mg.get("ratio") or mg.get("metric")
     org_txt = org_label(mg["org_filter"]) if mg.get("org_filter") else ""
     p = mg.get("period")
@@ -235,6 +282,10 @@ def route_deterministic(mg: dict) -> dict:
     versions = [v for v in (mg.get("versions") or [])]
     comps = list(mg.get("comparisons") or []) + [v for v in versions if v != "Actual"]
     level = mg.get("level_hint")
+    if mg.get("both_margins") and not intents & {"rank", "trend", "why", "breakdown", "versions", "pnl", "cockpit",
+                                                 "workforce"} and not level:
+        return {"name": "get_ratio", "arguments": {"ratio_name": "operating_margins", "org": org_txt, "period": ptxt,
+                                                   "comparison": ",".join(comps or ["PY", "Budget"])}}
     if "cockpit" in intents:
         return {"name": "get_kpi_cockpit", "arguments": {"org": org_txt, "month": ptxt if p and p["type"] == "MONTH" else ""}}
     if "workforce" in intents or (mg.get("tool") == "get_workforce" and not intents):
@@ -296,7 +347,7 @@ def _resolution_from(mg: dict, q: str) -> Resolution:
                       ratio=mg.get("ratio"), period=mg.get("period"), period_is_range=mg.get("period_is_range", False),
                       versions=mg.get("versions") or [], comparisons=mg.get("comparisons") or [],
                       level_hint=mg.get("level_hint"), top_n=mg.get("top_n"), ascending=mg.get("ascending"),
-                      intents=mg.get("intents") or [])
+                      intents=mg.get("intents") or [], both_margins=bool(mg.get("both_margins")))
 
 
 def _compact(mg: dict) -> dict:
@@ -333,7 +384,7 @@ def assemble_answer(core: str, outputs: list[ToolOutput]) -> str:
     bullets = [b for b in outputs[0].bullets if b and b not in text]
     if bullets:
         text += "\n\n" + "\n".join(f"- {b}" for b in bullets)
-    notes = list(dict.fromkeys(n for o in outputs for n in o.notes))[:2]
+    notes = [n for n in dict.fromkeys(n for o in outputs for n in o.notes) if n.rstrip(".") not in text][:2]
     if notes:
         text += "\n\n_" + " ".join(notes) + "_"
     return text
@@ -355,6 +406,8 @@ def clean_answer(text: str) -> str:
 
 
 def make_followups(primary: ToolOutput | None, mg: dict, user_id: str) -> list[str]:
+    if primary is not None and len(primary.meta.get("followups") or []) >= 3:
+        return list(primary.meta["followups"])[:3]
     org_f = (primary.filters_used.get("org_filter") if primary else None) or mg.get("org_filter") or default_org(user_id)
     org = org_label(org_f)
     lvl = child_level(org_f) or "l6_bu"
@@ -579,6 +632,7 @@ def node_preprocess(state: AgentState) -> AgentState:
     mg["question"] = res.clean_text or q          # without corrected-away phrases ("not YTD")
     if res.negated:
         mg["negated"] = list(res.negated)
+    apply_ui_filters(mg, res, mem, state.get("ui_filters") or {}, follow, as_of)
     route, message, options = "plan", "", []
     if is_dispute(q, res, mem):
         route = "clarify"
@@ -599,6 +653,52 @@ def node_preprocess(state: AgentState) -> AgentState:
     return {"merged": mg, "route": route, "message": message, "options": options, "suggested": suggested,
             "timings": {"preprocess": round(time.time() - t0, 3)}, "llm_calls": [], "errors": [],
             "attempts": 0, "outputs": [], "calls": []}
+
+
+def ui_signature(ui: dict | None) -> str:
+    return json.dumps(ui or {}, sort_keys=True, default=str)
+
+
+def apply_ui_filters(mg: dict, res: Resolution, mem: dict, ui: dict, follow: bool, as_of: date) -> None:
+    """Sidebar filters (scope, version, period) as the default context; records the source of each slot.
+
+    Priority: the question's own words > the conversation (follow-ups) > the sidebar > the default scope.
+    When the sidebar changed since the previous answer, it replaces what the conversation carried."""
+    changed = bool(ui) and ui_signature(ui) != (mem.get("ui_sig") or ui_signature({}))
+    src = {}
+    ui_org = {k: list(v) for k, v in (ui.get("org_filter") or {}).items() if v}
+    if res.org_filter:
+        src["org"] = "question"
+    elif ui_org and (changed or not follow or not mg.get("org_filter")):
+        mg["org_filter"] = ui_org
+        mg["org_from_sidebar"] = True
+        src["org"] = "sidebar"
+    else:
+        src["org"] = "conversation" if mg.get("org_filter") else "default"
+    ui_period = ui.get("period")
+    if res.period:
+        src["period"] = "question"
+    elif ui_period and (changed or not follow or not mg.get("period")):
+        mg["period"], mg["period_is_range"] = dict(ui_period), False
+        src["period"] = "sidebar"
+    else:
+        src["period"] = "conversation" if mg.get("period") else "default"
+    v = ui.get("version")
+    if res.versions or res.comparisons or "landing" in res.intents:
+        src["version"] = "question"
+    elif v and v != "Actual" and (changed or not follow or not (mg.get("versions") or mg.get("comparisons"))):
+        if v == "Landing":
+            if "landing" not in mg["intents"] and not set(mg["intents"]) & {"catalog", "workforce", "cockpit"}:
+                mg["intents"] = list(mg["intents"]) + ["landing"]
+                if mg.get("period") and src.get("period") != "question":
+                    mg["period"] = ti.Period("MONTH", ti.open_month(as_of)).to_dict()
+        else:
+            mg["versions"] = ["Actual", v]
+        src["version"] = "sidebar"
+    else:
+        src["version"] = "conversation" if (mg.get("versions") or mg.get("comparisons")) and follow else "default"
+    mg["sources"] = src
+    mg["ui_sig"] = ui_signature(ui)
 
 
 def node_plan(state: AgentState) -> AgentState:
@@ -627,6 +727,16 @@ def node_plan(state: AgentState) -> AgentState:
         calls, source = [suggested], source + "+router_followup"
     if not calls:
         calls = [suggested]
+    intents = set(mg.get("intents") or [])
+    landing_tools = ("get_landing", "get_ytd_with_landing", "rank_landing", "explain_landing")
+    if "catalog" in intents and calls[0]["name"] != "describe_catalog":
+        calls, source = [suggested], source + "+router_catalog"
+    elif "landing" in intents and "catalog" not in intents and calls[0]["name"] not in landing_tools:
+        calls, source = [suggested], source + "+router_landing"
+    elif calls[0]["name"] in landing_tools and "landing" not in intents and suggested.get("name") not in landing_tools:
+        # a landing tool needs landing wording ("landing", "land", "month-end", "outlook", "will ... miss budget");
+        # "latest forecast for the full year" is a forecast question, not the landing
+        calls, source = [suggested], source + "+router_not_landing"
     calls = respect_corrections(calls, mg, date.fromisoformat(state["as_of"]) if state.get("as_of") else as_of_date())
     timings = dict(state.get("timings", {}))
     timings["plan"] = round(time.time() - t0, 3)
@@ -803,8 +913,9 @@ def node_finalize(state: AgentState) -> AgentState:
                    "period": mg.get("period"), "period_is_range": mg.get("period_is_range", False),
                    "versions": mg.get("versions") or [], "comparisons": mg.get("comparisons") or [],
                    "intents": mg.get("intents") or [], "tool": primary.tool, "level_hint": mg.get("level_hint"),
-                   "top_n": mg.get("top_n"), "ascending": mg.get("ascending")}
-        if primary.kind == "ranking" and primary.data:
+                   "top_n": mg.get("top_n"), "ascending": mg.get("ascending"),
+                   "both_margins": bool(mg.get("both_margins") or primary.kind == "ratio_pair")}
+        if primary.kind in ("ranking", "landing_rank") and primary.data:
             lbl = primary.meta.get("level_label")
             new_mem.update({"entities": [str(r.get(lbl)) for r in primary.data][:25],
                             "entities_level": primary.meta.get("level"),
@@ -822,6 +933,9 @@ def node_finalize(state: AgentState) -> AgentState:
                                                    "Impact", "_fav")][0]
             new_mem.update({"entities": [str(r.get(lbl)) for r in rows][:25],
                             "entities_level": primary.meta.get("org_level"), "entities_ascending": False})
+    new_mem["ui_sig"] = mg.get("ui_sig") or ui_signature(state.get("ui_filters") or {})
+    if mg.get("sources"):
+        filters["applied"] = applied_filters(mg, filters)
     if primary and status == "ok":
         used = used_record(primary, mg, filters)
         carried = carried_labels(used, mg)
@@ -844,6 +958,25 @@ def node_finalize(state: AgentState) -> AgentState:
                         chart_spec=ChartSpec(**chart), filters_used=filters, sql_used=sql, followups=followups,
                         status=status, diagnostics=diag)
     return {"final": final.model_dump(), "new_memory": new_mem}
+
+
+SOURCE_TEXT = {"question": "from your question", "conversation": "carried over from the conversation",
+               "sidebar": "from the sidebar filters", "default": "default"}
+
+
+def applied_filters(mg: dict, filters: dict) -> list[str]:
+    """Human-readable list of the filters an answer used and where each came from."""
+    src = mg.get("sources") or {}
+    out = []
+    org = filters.get("org") or org_label(mg.get("org_filter") or {})
+    out.append(f"Scope: {org} ({SOURCE_TEXT.get(src.get('org', 'default'), 'default')})")
+    period = filters.get("period") or (mg.get("period") or {}).get("label") or ""
+    if period and period != "catalog":
+        out.append(f"Period: {period} ({SOURCE_TEXT.get(src.get('period', 'default'), 'default')})")
+    vers = [str(v).split(" (")[0] for v in (filters.get("versions") or [])]
+    if vers:
+        out.append(f"Versions: {', '.join(dict.fromkeys(vers))} ({SOURCE_TEXT.get(src.get('version', 'default'), 'default')})")
+    return out
 
 
 def build_graph():
@@ -871,15 +1004,18 @@ _GRAPH = None
 
 
 def ask(question: str, user_id: str = "group_cfo", memory: dict | None = None, model: str | None = None,
-        as_of: date | None = None) -> tuple[FinalAnswer, dict]:
-    """Run the agent for one question. Returns (validated answer, new conversation memory)."""
+        as_of: date | None = None, ui_filters: dict | None = None) -> tuple[FinalAnswer, dict]:
+    """Run the agent for one question. Returns (validated answer, new conversation memory).
+
+    `ui_filters` = the sidebar's default context: {"org_filter": {level: [values]}, "version": "Budget",
+    "period": {"type": "YTD", "end": 202610, ...}}. Words in the question always win."""
     global _GRAPH
     if _GRAPH is None:
         _GRAPH = build_graph()
     t0 = time.time()
     state = _GRAPH.invoke({"question": question, "user_id": user_id, "memory": memory or {},
                            "model": model or env("LLM_MODEL", "ollama/qwen2.5-coder:14b"),
-                           "as_of": (as_of or as_of_date()).isoformat()})
+                           "as_of": (as_of or as_of_date()).isoformat(), "ui_filters": ui_filters or {}})
     final = FinalAnswer(**state["final"])
     final.diagnostics["latency_s"] = round(time.time() - t0, 2)
     return final, state.get("new_memory") or {}

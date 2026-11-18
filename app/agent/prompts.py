@@ -15,6 +15,13 @@ Workforce: fictional employee records (role, grade, direct / indirect staff, hir
 Org: group > region (US & Canada, Mexico, Northern South America, Southern South America, BPU) > country > sector
 (product line) > business > BU (e.g. US-EPV-DEN-01).
 Versions: Actual, Budget, FC1, FC2, FC3; PY = LY = prior-year Actual; LatestFC = latest forecast.
+Landing: the expected month-end of the OPEN month only (the month after {last_closed}), with P10-P90; WIP = 0 in
+that month, so the revenue landing equals the billing landing. A month name in a landing question means the open
+month of this year. A closed month has actuals, a future month only forecasts.
+Margins: "operating margin on revenue" = operating profit / revenue (maop_margin_revenue) and "operating margin on
+production" = operating profit / production (maop_margin_production). "Profit %", "margin", "MAOP %", "MOP %" with no
+base means BOTH: pass "profit %" as the ratio and the tool returns both side by side. "MAOP" or "MOP" without "%" or
+"margin" is operating profit, an amount (get_pnl).
 Defaults: period = YTD of the last closed month ({last_closed}); comparisons = PY and Budget; currency USD.
 
 Choose the tool:
@@ -27,6 +34,11 @@ Choose the tool:
 - Budget vs FC1/FC2/FC3 vs Actual -> compare_versions
 - attrition / turnover / hires / leavers, or headcount / utilization / overtime by role, grade or direct vs indirect
   staff -> get_workforce (vs prior year only; for utilization or headcount vs Budget use get_ratio / get_pnl)
+- what is in scope / which regions, countries, businesses or BUs / list metrics or ratios / what data / what can you
+  do / help -> describe_catalog (never SQL)
+- landing / where will X land / expected month-end / this month's outlook / will we miss or beat budget this month
+  -> get_landing (one unit), rank_landing (which BUs or countries will miss or beat), explain_landing (how it is
+  calculated); YTD, QTD or full year including the landing -> get_ytd_with_landing
 - run_readonly_sql only if nothing else fits.
 Use the RESOLVED entities as arguments (plain words). Call exactly one tool unless two are clearly needed.
 
@@ -54,7 +66,17 @@ A: get_ratio {{"ratio_name": "utilization_rate", "org": "Mexico", "comparison": 
 Q: Attrition by role for Canada Environmental Lab Testing this year
 A: get_workforce {{"org": "Canada Environmental Lab Testing", "period": "YTD", "group_by": "role", "metric": "attrition"}}
 Q: Which BUs have the highest attrition this year?
-A: get_workforce {{"period": "YTD", "group_by": "BU", "metric": "attrition", "top_n": 10}}"""
+A: get_workforce {{"period": "YTD", "group_by": "BU", "metric": "attrition", "top_n": 10}}
+Q: What is our profit % YTD?
+A: get_ratio {{"ratio_name": "profit %", "org": "", "period": "YTD", "comparison": "PY"}}
+Q: Which countries are in scope?
+A: describe_catalog {{"kind": "countries"}}
+Q: What's the November landing for the United States?
+A: get_landing {{"org": "United States", "measures": [], "month": "November"}}
+Q: Which BUs are expected to miss budget this month?
+A: rank_landing {{"metric": "billing", "org_level": "l6_bu", "sort_by": "gap_vs_budget", "top_n": 10}}
+Q: What will YTD MAOP margin be through November including the landing?
+A: get_ytd_with_landing {{"metric_or_ratio": "profit %", "org": "", "through_month": "November", "comparisons": ["PY", "Budget", "LatestFC"]}}"""
 
 PLANNER_USER = """Question: {question}
 
@@ -85,8 +107,10 @@ Rules:
 - Name the scope as the Scope line in FACTS does (e.g. "United States Environmental Lab Testing", not just
   "the United States").
 - Keep every number with the month, entity and period that FACTS attach it to.
-- Use the names in FACTS (e.g. "operating profit", "operating margin", "EBIT"), also when the question uses
-  another term.
+- Use the names in FACTS (e.g. "operating profit", "operating margin on revenue", "EBIT"), also when the
+  question uses another term. When FACTS give both operating margins, mention both.
+- For a landing, give the P50 with its P10-P90 range as FACTS state them, and say it is an estimate for the
+  month; never call a landing an actual.
 - Amounts are in USD. Costs going up are unfavourable. At most 110 words."""
 
 WRITER_USER = """Question: {question}

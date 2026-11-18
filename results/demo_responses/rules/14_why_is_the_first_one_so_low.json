@@ -1,59 +1,59 @@
 {
-  "answer_markdown": "**MAOP margin (on revenue) for Ecuador, YTD Oct 2026: Actual 9.4%, 1.7 pp below PY (11.1%), unfavourable.**\n\nAccount drivers (largest first): Personnel charges as % of revenue: 51.0% vs 50.1%, impact on MAOP margin (on revenue) -0.9 pp (unfavourable); External subcontracting as % of revenue: 18.7% vs 18.1%, impact on MAOP margin (on revenue) -0.6 pp (unfavourable); Total functional costs as % of revenue: 10.5% vs 10.2%, impact on MAOP margin (on revenue) -0.2 pp (unfavourable); Other costs as % of revenue: 12.2% vs 12.1%, impact on MAOP margin (on revenue) -0.1 pp (unfavourable); Functional neutralization as % of revenue: 2.5% vs 2.4%, impact on MAOP margin (on revenue) +0.1 pp (favourable).\n\n- Product line with the largest change: Buildings & Infrastructure 9.5% vs 12.0% (-2.5 pp, unfavourable)",
+  "answer_markdown": "**Operating margin on revenue for Paraguay, YTD Oct 2026: Actual 10.3%, 1.4 pp above PY (8.9%), favourable.**\n\nAccount drivers (largest first): Personnel costs as % of revenue: 50.8% vs 52.3%, impact on Operating margin on revenue +1.5 pp (favourable); External subcontracting as % of revenue: 19.3% vs 18.6%, impact on Operating margin on revenue -0.6 pp (unfavourable); Functional costs as % of revenue: 10.4% vs 10.8%, impact on Operating margin on revenue +0.4 pp (favourable); Other costs as % of revenue: 11.1% vs 11.3%, impact on Operating margin on revenue +0.2 pp (favourable); Functional cost recharges as % of revenue: 2.4% vs 2.5%, impact on Operating margin on revenue -0.1 pp (unfavourable).\n\n- Product line with the largest change: Buildings & Infrastructure 8.3% vs 6.8% (+1.5 pp, favourable)",
   "table": [
     {
-      "Driver": "Personnel charges as % of revenue",
+      "Driver": "Personnel costs as % of revenue",
       "_code": "personnel",
-      "Actual": 0.5101357088327767,
-      "PY": 0.5011846951728877,
-      "Impact": -0.00895101365988904,
-      "_fav": false,
-      "Share of variance": 0.5315445779001229
+      "Actual": 0.5082755509603468,
+      "PY": 0.5229277088795404,
+      "Impact": 0.014652157919193609,
+      "_fav": true,
+      "Share of variance": 1.078579027919699
     },
     {
       "Driver": "External subcontracting as % of revenue",
       "_code": "subcontracting",
-      "Actual": 0.18662791680299712,
-      "PY": 0.1805603944184529,
-      "Impact": -0.006067522384544222,
+      "Actual": 0.19268598004823073,
+      "PY": 0.18637826452366932,
+      "Impact": -0.006307715524561414,
       "_fav": false,
-      "Share of variance": 0.3603121107103847
+      "Share of variance": -0.4643254404160743
     },
     {
-      "Driver": "Total functional costs as % of revenue",
+      "Driver": "Functional costs as % of revenue",
       "_code": "functional_cost",
-      "Actual": 0.10470295201683756,
-      "PY": 0.10236645939584861,
-      "Impact": -0.0023364926209889503,
-      "_fav": false,
-      "Share of variance": 0.1387496468199691
+      "Actual": 0.10416160790059416,
+      "PY": 0.10772053618029713,
+      "Impact": 0.003558928279702972,
+      "_fav": true,
+      "Share of variance": 0.2619808922022059
     },
     {
       "Driver": "Other costs as % of revenue",
       "_code": "other_cost",
-      "Actual": 0.1222568529434419,
-      "PY": 0.12131542556340445,
-      "Impact": -0.0009414273800374406,
-      "_fav": false,
-      "Share of variance": 0.05590546929763296
+      "Actual": 0.11061610538580272,
+      "PY": 0.11270428937137315,
+      "Impact": 0.002088183985570438,
+      "_fav": true,
+      "Share of variance": 0.15371602365298564
     },
     {
-      "Driver": "Functional neutralization as % of revenue",
+      "Driver": "Functional cost recharges as % of revenue",
       "_code": "functional_neutralization",
-      "Actual": 0.02494384772400097,
-      "PY": 0.024139381784875933,
-      "Impact": 0.0008044659391250354,
-      "_fav": true,
-      "Share of variance": -0.04777218807780746
+      "Actual": 0.024494502352591725,
+      "PY": 0.025366456661306866,
+      "Impact": -0.0008719543087151414,
+      "_fav": false,
+      "Share of variance": -0.06418656117897818
     },
     {
       "Driver": "Production as % of revenue",
       "_code": "production",
-      "Actual": 0.992722940384221,
-      "PY": 0.9920705795997585,
-      "Impact": 0.0006523607844625134,
+      "Actual": 0.993934126654257,
+      "PY": 0.993469040543062,
+      "Impact": 0.0004650861111950011,
       "_fav": true,
-      "Share of variance": -0.038739616650302185
+      "Share of variance": 0.03423605782016202
     }
   ],
   "table_spec": {
@@ -66,58 +66,58 @@
     ],
     "rows": [
       {
-        "Driver": "Personnel charges as % of revenue",
+        "Driver": "Personnel costs as % of revenue",
         "_code": "personnel",
-        "Actual": 0.5101357088327767,
-        "PY": 0.5011846951728877,
-        "Impact": -0.00895101365988904,
-        "_fav": false,
-        "Share of variance": 0.5315445779001229
+        "Actual": 0.5082755509603468,
+        "PY": 0.5229277088795404,
+        "Impact": 0.014652157919193609,
+        "_fav": true,
+        "Share of variance": 1.078579027919699
       },
       {
         "Driver": "External subcontracting as % of revenue",
         "_code": "subcontracting",
-        "Actual": 0.18662791680299712,
-        "PY": 0.1805603944184529,
-        "Impact": -0.006067522384544222,
+        "Actual": 0.19268598004823073,
+        "PY": 0.18637826452366932,
+        "Impact": -0.006307715524561414,
         "_fav": false,
-        "Share of variance": 0.3603121107103847
+        "Share of variance": -0.4643254404160743
       },
       {
-        "Driver": "Total functional costs as % of revenue",
+        "Driver": "Functional costs as % of revenue",
         "_code": "functional_cost",
-        "Actual": 0.10470295201683756,
-        "PY": 0.10236645939584861,
-        "Impact": -0.0023364926209889503,
-        "_fav": false,
-        "Share of variance": 0.1387496468199691
+        "Actual": 0.10416160790059416,
+        "PY": 0.10772053618029713,
+        "Impact": 0.003558928279702972,
+        "_fav": true,
+        "Share of variance": 0.2619808922022059
       },
       {
         "Driver": "Other costs as % of revenue",
         "_code": "other_cost",
-        "Actual": 0.1222568529434419,
-        "PY": 0.12131542556340445,
-        "Impact": -0.0009414273800374406,
-        "_fav": false,
-        "Share of variance": 0.05590546929763296
+        "Actual": 0.11061610538580272,
+        "PY": 0.11270428937137315,
+        "Impact": 0.002088183985570438,
+        "_fav": true,
+        "Share of variance": 0.15371602365298564
       },
       {
-        "Driver": "Functional neutralization as % of revenue",
+        "Driver": "Functional cost recharges as % of revenue",
         "_code": "functional_neutralization",
-        "Actual": 0.02494384772400097,
-        "PY": 0.024139381784875933,
-        "Impact": 0.0008044659391250354,
-        "_fav": true,
-        "Share of variance": -0.04777218807780746
+        "Actual": 0.024494502352591725,
+        "PY": 0.025366456661306866,
+        "Impact": -0.0008719543087151414,
+        "_fav": false,
+        "Share of variance": -0.06418656117897818
       },
       {
         "Driver": "Production as % of revenue",
         "_code": "production",
-        "Actual": 0.992722940384221,
-        "PY": 0.9920705795997585,
-        "Impact": 0.0006523607844625134,
+        "Actual": 0.993934126654257,
+        "PY": 0.993469040543062,
+        "Impact": 0.0004650861111950011,
         "_fav": true,
-        "Share of variance": -0.038739616650302185
+        "Share of variance": 0.03423605782016202
       }
     ],
     "col_fmt": {
@@ -132,23 +132,7 @@
         "level": 0,
         "fmt": null,
         "fav": {
-          "Impact": false
-        }
-      },
-      {
-        "kind": "line",
-        "level": 0,
-        "fmt": null,
-        "fav": {
-          "Impact": false
-        }
-      },
-      {
-        "kind": "line",
-        "level": 0,
-        "fmt": null,
-        "fav": {
-          "Impact": false
+          "Impact": true
         }
       },
       {
@@ -165,6 +149,22 @@
         "fmt": null,
         "fav": {
           "Impact": true
+        }
+      },
+      {
+        "kind": "line",
+        "level": 0,
+        "fmt": null,
+        "fav": {
+          "Impact": true
+        }
+      },
+      {
+        "kind": "line",
+        "level": 0,
+        "fmt": null,
+        "fav": {
+          "Impact": false
         }
       },
       {
@@ -176,7 +176,7 @@
         }
       }
     ],
-    "caption": "Impact = contribution to the change in MAOP margin (on revenue) (percentage points)",
+    "caption": "Impact = contribution to the change in Operating margin on revenue (percentage points)",
     "extra_tables": [
       {
         "columns": [
@@ -188,16 +188,16 @@
         "rows": [
           {
             "Product line": "Buildings & Infrastructure",
-            "Actual": 0.09498346213730656,
-            "PY": 0.1202682816832261,
-            "Impact": -0.025284819545919546,
-            "_fav": false
+            "Actual": 0.08306010283867397,
+            "PY": 0.0681235706665151,
+            "Impact": 0.014936532172158873,
+            "_fav": true
           },
           {
-            "Product line": "Industry & Energy",
-            "Actual": 0.0912122623945806,
-            "PY": 0.084985478827909,
-            "Impact": 0.006226783566671612,
+            "Product line": "Certification & Sustainability",
+            "Actual": 0.261321335464687,
+            "PY": 0.25779504947341425,
+            "Impact": 0.0035262859912727484,
             "_fav": true
           }
         ],
@@ -212,7 +212,7 @@
             "level": 0,
             "fmt": null,
             "fav": {
-              "Impact": false
+              "Impact": true
             }
           },
           {
@@ -230,7 +230,7 @@
   },
   "chart_spec": {
     "type": "waterfall",
-    "title": "MAOP margin (on revenue): PY to Actual - Ecuador (YTD Oct 2026)",
+    "title": "Operating margin on revenue: PY to Actual - Paraguay (YTD Oct 2026)",
     "fmt": "pct",
     "x": "label",
     "y": [
@@ -238,43 +238,43 @@
     ],
     "data": [
       {
-        "label": "MAOP margin (on revenue) PY",
-        "value": 0.11078298683404084,
+        "label": "Operating margin on revenue PY",
+        "value": 0.08910469824948884,
         "measure": "absolute"
       },
       {
-        "label": "Personnel charges",
-        "value": -0.00895101365988904,
+        "label": "Personnel costs",
+        "value": 0.014652157919193609,
         "measure": "relative"
       },
       {
         "label": "External subcontracting",
-        "value": -0.006067522384544222,
+        "value": -0.006307715524561414,
         "measure": "relative"
       },
       {
-        "label": "Total functional costs",
-        "value": -0.0023364926209889503,
+        "label": "Functional costs",
+        "value": 0.003558928279702972,
         "measure": "relative"
       },
       {
         "label": "Other costs",
-        "value": -0.0009414273800374406,
+        "value": 0.002088183985570438,
         "measure": "relative"
       },
       {
-        "label": "Functional neutralization",
-        "value": 0.0008044659391250354,
+        "label": "Functional cost recharges",
+        "value": -0.0008719543087151414,
         "measure": "relative"
       },
       {
         "label": "Production",
-        "value": 0.0006523607844625134,
+        "value": 0.0004650861111950011,
         "measure": "relative"
       },
       {
-        "label": "MAOP margin (on revenue) Actual",
-        "value": 0.09394335751216872,
+        "label": "Operating margin on revenue Actual",
+        "value": 0.10268938471187417,
         "measure": "total"
       }
     ],
@@ -283,15 +283,15 @@
     }
   },
   "filters_used": {
-    "org": "Ecuador",
+    "org": "Paraguay",
     "org_filter": {
       "l3_country": [
-        "Ecuador"
+        "Paraguay"
       ]
     },
     "currency": "USD",
-    "fx_rate": "B26 (constant budget rate)",
-    "as_of_date": "2026-11-12",
+    "fx_rate": "constant budget rate",
+    "as_of_date": "2026-11-16",
     "user": "group_cfo",
     "rls": "SQL Server SECURITY POLICY (SESSION_CONTEXT)",
     "period": "YTD Oct 2026",
@@ -299,18 +299,28 @@
     "versions": [
       "Actual (Actual, YTD Oct 2026)",
       "PY (Actual, YTD Oct 2025)"
+    ],
+    "applied": [
+      "Scope: Paraguay (from your question)",
+      "Period: YTD Oct 2026 (carried over from the conversation)",
+      "Versions: Actual, PY (default)"
+    ],
+    "carried_over": [
+      "Operating margin on revenue",
+      "Paraguay",
+      "YTD Oct 2026"
     ]
   },
   "sql_used": [
-    "SELECT fact_pnl.account_id, sum(fact_pnl.amount_usd) AS amount \nFROM fact_pnl JOIN dim_org ON fact_pnl.bu_id = dim_org.bu_id JOIN dim_version ON fact_pnl.version_id = dim_version.version_id \nWHERE dim_version.name = N'Actual' AND fact_pnl.month_key BETWEEN 202601 AND 202610 AND dim_org.l3_country IN (N'Ecuador') GROUP BY fact_pnl.account_id",
-    "SELECT fact_pnl.account_id, sum(fact_pnl.amount_usd) AS amount \nFROM fact_pnl JOIN dim_org ON fact_pnl.bu_id = dim_org.bu_id JOIN dim_version ON fact_pnl.version_id = dim_version.version_id \nWHERE dim_version.name = N'Actual' AND fact_pnl.month_key BETWEEN 202501 AND 202510 AND dim_org.l3_country IN (N'Ecuador') GROUP BY fact_pnl.account_id",
-    "SELECT dim_org.l4_product_line, fact_pnl.account_id, sum(fact_pnl.amount_usd) AS amount \nFROM fact_pnl JOIN dim_org ON fact_pnl.bu_id = dim_org.bu_id JOIN dim_version ON fact_pnl.version_id = dim_version.version_id \nWHERE dim_version.name = N'Actual' AND fact_pnl.month_key BETWEEN 202601 AND 202610 AND dim_org.l3_country IN (N'Ecuador') GROUP BY dim_org.l4_product_line, fact_pnl.account_id",
-    "SELECT dim_org.l4_product_line, fact_pnl.account_id, sum(fact_pnl.amount_usd) AS amount \nFROM fact_pnl JOIN dim_org ON fact_pnl.bu_id = dim_org.bu_id JOIN dim_version ON fact_pnl.version_id = dim_version.version_id \nWHERE dim_version.name = N'Actual' AND fact_pnl.month_key BETWEEN 202501 AND 202510 AND dim_org.l3_country IN (N'Ecuador') GROUP BY dim_org.l4_product_line, fact_pnl.account_id"
+    "SELECT fact_pnl.account_id, sum(fact_pnl.amount_usd) AS amount \nFROM fact_pnl JOIN dim_org ON fact_pnl.bu_id = dim_org.bu_id JOIN dim_version ON fact_pnl.version_id = dim_version.version_id \nWHERE dim_version.name = N'Actual' AND fact_pnl.month_key BETWEEN 202601 AND 202610 AND dim_org.l3_country IN (N'Paraguay') GROUP BY fact_pnl.account_id",
+    "SELECT fact_pnl.account_id, sum(fact_pnl.amount_usd) AS amount \nFROM fact_pnl JOIN dim_org ON fact_pnl.bu_id = dim_org.bu_id JOIN dim_version ON fact_pnl.version_id = dim_version.version_id \nWHERE dim_version.name = N'Actual' AND fact_pnl.month_key BETWEEN 202501 AND 202510 AND dim_org.l3_country IN (N'Paraguay') GROUP BY fact_pnl.account_id",
+    "SELECT dim_org.l4_product_line, fact_pnl.account_id, sum(fact_pnl.amount_usd) AS amount \nFROM fact_pnl JOIN dim_org ON fact_pnl.bu_id = dim_org.bu_id JOIN dim_version ON fact_pnl.version_id = dim_version.version_id \nWHERE dim_version.name = N'Actual' AND fact_pnl.month_key BETWEEN 202601 AND 202610 AND dim_org.l3_country IN (N'Paraguay') GROUP BY dim_org.l4_product_line, fact_pnl.account_id",
+    "SELECT dim_org.l4_product_line, fact_pnl.account_id, sum(fact_pnl.amount_usd) AS amount \nFROM fact_pnl JOIN dim_org ON fact_pnl.bu_id = dim_org.bu_id JOIN dim_version ON fact_pnl.version_id = dim_version.version_id \nWHERE dim_version.name = N'Actual' AND fact_pnl.month_key BETWEEN 202501 AND 202510 AND dim_org.l3_country IN (N'Paraguay') GROUP BY dim_org.l4_product_line, fact_pnl.account_id"
   ],
   "followups": [
-    "Show the monthly trend of MAOP margin (on revenue) for Ecuador since 2025",
-    "Show the Personnel charges trend for Ecuador vs budget",
-    "Compare Budget vs FC3 vs Actual for Ecuador"
+    "Show the monthly trend of Operating margin on revenue for Paraguay since 2025",
+    "Show the Personnel costs trend for Paraguay vs budget",
+    "Compare Budget vs FC3 vs Actual for Paraguay"
   ],
   "status": "ok",
   "diagnostics": {
@@ -319,7 +329,7 @@
         "name": "variance_drivers",
         "arguments": {
           "metric": "maop_margin_revenue",
-          "org": "Ecuador",
+          "org": "Paraguay",
           "period": "YTD Oct 2026",
           "comparison": "PY",
           "depth": 1
@@ -331,7 +341,7 @@
       "name": "variance_drivers",
       "arguments": {
         "metric": "maop_margin_revenue",
-        "org": "Ecuador",
+        "org": "Paraguay",
         "period": "YTD Oct 2026",
         "comparison": "PY",
         "depth": 1
@@ -348,6 +358,9 @@
             "<empty>"
           ],
           "checked": 0,
+          "problems": [
+            "the answer was empty"
+          ],
           "draft": ""
         }
       ],
@@ -357,15 +370,17 @@
     },
     "llm_calls": [],
     "errors": [],
+    "options_mode": null,
+    "negated": [],
     "model": "rules",
     "timings": {
-      "preprocess": 0.009,
+      "preprocess": 0.007,
       "plan": 0.0,
-      "act": 0.164,
+      "act": 0.138,
       "write#1": 0.0
     },
     "resolved": {
-      "org": "Ecuador",
+      "org": "Paraguay",
       "metric_or_ratio": "maop_margin_revenue",
       "period": "YTD Oct 2026",
       "versions": [],
@@ -377,34 +392,34 @@
     "followup": true,
     "options": [],
     "facts": [
-      "MAOP margin (on revenue) for Ecuador, YTD Oct 2026: Actual 9.4%, 1.7 pp below PY (11.1%), unfavourable.",
-      "Account drivers (largest first): Personnel charges as % of revenue: 51.0% vs 50.1%, impact on MAOP margin (on revenue) -0.9 pp (unfavourable); External subcontracting as % of revenue: 18.7% vs 18.1%, impact on MAOP margin (on revenue) -0.6 pp (unfavourable); Total functional costs as % of revenue: 10.5% vs 10.2%, impact on MAOP margin (on revenue) -0.2 pp (unfavourable); Other costs as % of revenue: 12.2% vs 12.1%, impact on MAOP margin (on revenue) -0.1 pp (unfavourable); Functional neutralization as % of revenue: 2.5% vs 2.4%, impact on MAOP margin (on revenue) +0.1 pp (favourable)",
-      "By product line (largest change first): Buildings & Infrastructure 9.5% vs 12.0% (-2.5 pp, unfavourable); Industry & Energy 9.1% vs 8.5% (+0.6 pp, favourable)"
+      "Operating margin on revenue for Paraguay, YTD Oct 2026: Actual 10.3%, 1.4 pp above PY (8.9%), favourable.",
+      "Account drivers (largest first): Personnel costs as % of revenue: 50.8% vs 52.3%, impact on Operating margin on revenue +1.5 pp (favourable); External subcontracting as % of revenue: 19.3% vs 18.6%, impact on Operating margin on revenue -0.6 pp (unfavourable); Functional costs as % of revenue: 10.4% vs 10.8%, impact on Operating margin on revenue +0.4 pp (favourable); Other costs as % of revenue: 11.1% vs 11.3%, impact on Operating margin on revenue +0.2 pp (favourable); Functional cost recharges as % of revenue: 2.4% vs 2.5%, impact on Operating margin on revenue -0.1 pp (unfavourable)",
+      "By product line (largest change first): Buildings & Infrastructure 8.3% vs 6.8% (+1.5 pp, favourable); Certification & Sustainability 26.1% vs 25.8% (+0.4 pp, favourable)"
     ],
     "evidence": {
       "extra": {
         "org": [
           {
             "Product line": "Buildings & Infrastructure",
-            "Actual": 0.09498346213730656,
-            "PY": 0.1202682816832261,
-            "Impact": -0.025284819545919546,
-            "_fav": false
+            "Actual": 0.08306010283867397,
+            "PY": 0.0681235706665151,
+            "Impact": 0.014936532172158873,
+            "_fav": true
           },
           {
-            "Product line": "Industry & Energy",
-            "Actual": 0.0912122623945806,
-            "PY": 0.084985478827909,
-            "Impact": 0.006226783566671612,
+            "Product line": "Certification & Sustainability",
+            "Actual": 0.261321335464687,
+            "PY": 0.25779504947341425,
+            "Impact": 0.0035262859912727484,
             "_fav": true
           }
         ]
       },
       "totals": {
-        "total_current": 0.09394335751216872,
-        "total_comparison": 0.11078298683404084
+        "total_current": 0.10268938471187417,
+        "total_comparison": 0.08910469824948884
       }
     },
-    "latency_s": 0.18
+    "latency_s": 0.15
   }
 }

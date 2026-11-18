@@ -8,22 +8,22 @@
 
 **Ranking of Product lines by External subcontracting within RL Group, YTD Oct 2026 (highest first); 8 Product lines in scope, showing 8.**
 
-- Rank 1: Buildings & Infrastructure USD 43.5M (PY USD 41.8M, +USD 1.8M, +4.2%)
-- Rank 2: Industry & Energy USD 28.6M (PY USD 27.6M, +USD 1.0M, +3.8%)
-- Rank 3: Power & Utilities USD 12.3M (PY USD 11.9M, +USD 445k, +3.7%)
+- Rank 1: Industry & Energy USD 40.5M (PY USD 38.2M, +USD 2.4M, +6.2%)
+- Rank 2: Buildings & Infrastructure USD 34.2M (PY USD 31.5M, +USD 2.7M, +8.5%)
+- Rank 3: Power & Utilities USD 11.4M (PY USD 10.8M, +USD 580k, +5.4%)
 
 ## Table
 
 | Rank | Product line | Actual | PY | Var | Var % |
 |:---|---:|---:|---:|---:|---:|
-| 1 | Buildings & Infrastructure | 43,538 | 41,772 | 1,766 | 4.2% |
-| 2 | Industry & Energy | 28,608 | 27,563 | 1,045 | 3.8% |
-| 3 | Power & Utilities | 12,330 | 11,885 | 445 | 3.7% |
-| 4 | Certification & Sustainability | 6,784 | 6,319 | 464 | 7.3% |
-| 5 | Environmental Lab Testing | 6,380 | 6,281 | 99 | 1.6% |
-| 6 | Metals & Minerals | 4,153 | 3,908 | 245 | 6.3% |
-| 7 | Elevators & Pressure Vessels | 3,874 | 3,704 | 170 | 4.6% |
-| 8 | Consumer Products | 2,582 | 2,464 | 119 | 4.8% |
+| 1 | Industry & Energy | 40,546 | 38,189 | 2,357 | 6.2% |
+| 2 | Buildings & Infrastructure | 34,215 | 31,526 | 2,689 | 8.5% |
+| 3 | Power & Utilities | 11,352 | 10,771 | 580 | 5.4% |
+| 4 | Metals & Minerals | 6,859 | 5,862 | 997 | 17.0% |
+| 5 | Certification & Sustainability | 6,693 | 6,279 | 414 | 6.6% |
+| 6 | Elevators & Pressure Vessels | 6,374 | 6,080 | 294 | 4.8% |
+| 7 | Environmental Lab Testing | 2,288 | 2,653 | (364) | (13.7%) |
+| 8 | Consumer Products | 1,843 | 1,765 | 78 | 4.4% |
 
 _USD k_
 
@@ -36,13 +36,13 @@ _USD k_
 - Scope: RL Group
 - Period: YTD Oct 2026 (Jan 2026 - Oct 2026)
 - Versions: Actual (Actual, YTD Oct 2026), PY (Actual, YTD Oct 2025)
-- Currency: USD at B26 (constant budget rate)
-- As-of date: 2026-11-12 · row-level security: SQL Server SECURITY POLICY (SESSION_CONTEXT)
+- Currency: USD at constant budget rate
+- As-of date: 2026-11-16 · row-level security: SQL Server SECURITY POLICY (SESSION_CONTEXT)
 
 ## Follow-up questions
 
-1. Why is Buildings & Infrastructure where it is on External subcontracting?
-2. Show the External subcontracting trend for Buildings & Infrastructure since 2025
+1. Why is Industry & Energy where it is on External subcontracting?
+2. Show the External subcontracting trend for Industry & Energy since 2025
 3. Show the bottom 5 Product lines by External subcontracting in RL Group instead
 
 ## Diagnostics
@@ -74,6 +74,9 @@ _USD k_
           "<empty>"
         ],
         "checked": 0,
+        "problems": [
+          "the answer was empty"
+        ],
         "draft": ""
       }
     ],
@@ -83,9 +86,9 @@ _USD k_
   },
   "errors": [],
   "timings": {
-    "preprocess": 0.005,
+    "preprocess": 0.008,
     "plan": 0.0,
-    "act": 0.314,
+    "act": 0.315,
     "write#1": 0.0
   }
 }

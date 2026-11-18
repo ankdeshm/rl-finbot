@@ -1,8 +1,9 @@
 # Golden questions for the evaluation (tests/run_eval.py).
 #
 # Expected values are NOT hard-coded: each `expect` item is a small spec that tests/eval_dsl.py
-# compiles to raw SQL over the base tables (independent of the semantic layer). As-of date is
-# 2026-11-12, so "this year" / "YTD" = Jan-Oct 2026 and "last month" = Oct 2026.
+# compiles to raw SQL over the base tables (independent of the semantic layer). As-of date is the
+# data as-of date in config/settings.yaml (2026-11-16): "this year" / "YTD" = Jan-Oct 2026, "last month" =
+# Oct 2026, and the open (landing) month is Nov 2026.
 #
 # Fields:
 #   id, category, q (last turn), turns (optional earlier turns of the same conversation),
@@ -11,6 +12,9 @@
 #           the others only in the tool output unless `text: true`. All must be in the tool output.
 #   text_mode: all (default) | any  - how text-checked items combine
 #   rls: true  - counted in the row-level-security pass rate
+#   absent: [names]  - must not appear in the answer text or table (e.g. units outside the persona's access)
+#   ui_filters: {...} - sidebar filters passed with every turn (org_filter / version / period)
+#   resume: true  - the earlier turns are stored and reloaded (conversation history) before the last turn
 
 # ------------------------------------------------------------------------------- P&L
 - id: pnl_us_op
@@ -696,3 +700,302 @@
   expect:
     - {w: attrition, org: {l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
     - {w: attrition, org: {l3_country: Canada, l4_product_line: Environmental Lab Testing}, p: YTD-2026-10}
+
+# ------------------------------------------------------------------------------- catalog / discovery (describe_catalog, never SQL)
+- id: cat_regions
+  category: catalog
+  q: What regions are in scope?
+  tools: [describe_catalog]
+  expect:
+    - {c: regions}
+- id: cat_countries_us_head
+  category: catalog
+  persona: us_country_head
+  q: Which countries are in scope?
+  tools: [describe_catalog]
+  rls: true
+  absent: [Mexico, Brazil, Chile, Argentina]
+  expect:
+    - {c: countries, persona: us_country_head}
+- id: cat_countries_env_leader
+  category: catalog
+  persona: env_pl_leader
+  q: Which countries are in scope?
+  tools: [describe_catalog]
+  rls: true
+  absent: [Mexico, Brazil, Chile]
+  expect:
+    - {c: countries, persona: env_pl_leader}
+- id: cat_businesses
+  category: catalog
+  q: Which businesses can I ask about?
+  tools: [describe_catalog]
+  expect:
+    - {c: businesses}
+- id: cat_bus_in_mexico
+  category: catalog
+  q: Which business units are in Mexico?
+  tools: [describe_catalog]
+  expect:
+    - {c: business_units, within: {l3_country: Mexico}}
+- id: cat_product_lines
+  category: catalog
+  q: Which product lines can I ask about?
+  tools: [describe_catalog]
+  expect:
+    - {c: product_lines}
+- id: cat_ratios
+  category: catalog
+  q: What ratios do you support?
+  tools: [describe_catalog]
+  expect:
+    - {names_from_yaml: ratios, text: false}
+- id: cat_metrics
+  category: catalog
+  q: list all metrics
+  tools: [describe_catalog]
+- id: cat_data
+  category: catalog
+  q: What data do you use?
+  tools: [describe_catalog]
+- id: cat_help
+  category: catalog
+  q: help
+  tools: [describe_catalog]
+
+# ------------------------------------------------------------------------------- margins (both margins when no base is given)
+- id: mar_profit_pct_both
+  category: margin
+  q: What is our profit % YTD?
+  tools: [get_ratio]
+  expect:
+    - {r: [maop, revenue], p: YTD-2026-10}
+    - {r: [maop, production], p: YTD-2026-10, text: true}
+- id: mar_mop_pct_us_vs_budget
+  category: margin
+  q: What is the MOP % of the United States vs budget this year?
+  tools: [get_ratio]
+  expect:
+    - {r: [maop, revenue], org: {l3_country: United States}, p: YTD-2026-10}
+    - {r: [maop, production], org: {l3_country: United States}, p: YTD-2026-10, text: true}
+    - {r: [maop, revenue], org: {l3_country: United States}, p: YTD-2026-10, v: Budget}
+- id: mar_revenue_only_mexico
+  category: margin
+  q: What is the operating margin on revenue for Mexico YTD?
+  tools: [get_ratio]
+  absent: [on production]
+  expect:
+    - {r: [maop, revenue], org: {l3_country: Mexico}, p: YTD-2026-10}
+- id: mar_production_only_canada
+  category: margin
+  q: MAOP/production for Canada in 2025
+  tools: [get_ratio, get_trend]
+  absent: [on revenue]
+  expect:
+    - {r: [maop, production], org: {l3_country: Canada}, p: FY-2025}
+- id: mar_ebit_like_brazil_last_month
+  category: margin
+  q: EBIT-like margin for Brazil last month
+  tools: [get_ratio]
+  expect:
+    - {r: [maop, revenue], org: {l3_country: Brazil}, p: M-2026-10}
+    - {r: [maop, production], org: {l3_country: Brazil}, p: M-2026-10, text: true}
+- id: mar_margin_on_revenue_trend
+  category: margin
+  q: Show the operating margin on revenue trend by month for US & Canada since January 2025
+  tools: [get_trend]
+  expect:
+    - {r: [maop, revenue], org: {l2_region: US & Canada}, p: M-2026-10, text: false}
+    - {r: [maop, revenue], org: {l2_region: US & Canada}, p: M-2025-01, text: false}
+
+# ------------------------------------------------------------------------------- sidebar filters (default context; the question wins)
+- id: sb_country_default
+  category: sidebar
+  ui_filters: {org_filter: {l3_country: [Mexico]}}
+  q: How is operating profit YTD vs budget?
+  tools: [get_pnl, compare_versions, variance_drivers]
+  expect:
+    - {m: maop, org: {l3_country: Mexico}, p: YTD-2026-10}
+    - {m: maop, org: {l3_country: Mexico}, p: YTD-2026-10, v: Budget}
+- id: sb_question_wins
+  category: sidebar
+  ui_filters: {org_filter: {l3_country: [Mexico]}}
+  q: How is operating profit YTD vs budget for Canada?
+  tools: [get_pnl, compare_versions, variance_drivers]
+  absent: [Mexico]
+  expect:
+    - {m: maop, org: {l3_country: Canada}, p: YTD-2026-10}
+    - {m: maop, org: {l3_country: Canada}, p: YTD-2026-10, v: Budget}
+- id: sb_two_countries
+  category: sidebar
+  ui_filters: {org_filter: {l3_country: [Chile, Peru]}}
+  q: Revenue YTD vs last year
+  tools: [get_pnl]
+  expect:
+    - {m: revenue, org: {l3_country: [Chile, Peru]}, p: YTD-2026-10}
+    - {m: revenue, org: {l3_country: [Chile, Peru]}, p: YTD-2026-10, v: PY}
+- id: sb_period_month
+  category: sidebar
+  ui_filters: {period: {type: MONTH, label: Sep 2026, start: 202609, end: 202609}}
+  q: What was production in Brazil?
+  tools: [get_pnl, get_trend]
+  expect:
+    - {m: production, org: {l3_country: Brazil}, p: M-2026-09}
+- id: sb_version_landing
+  category: sidebar
+  ui_filters: {org_filter: {l3_country: [United States]}, version: Landing,
+               period: {type: MONTH, label: Nov 2026, start: 202611, end: 202611}}
+  q: What will billing be?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l3_country: United States}, v: LANDING, p: M-2026-11}
+
+# ------------------------------------------------------------------------------- resumed conversations (history reloaded, context restored)
+- id: res_vs_last_year
+  category: resume
+  resume: true
+  turns: ["How is operating profit YTD vs budget for Mexico?"]
+  q: and vs last year?
+  tools: [get_pnl, variance_drivers]
+  expect:
+    - {m: maop, org: {l3_country: Mexico}, p: YTD-2026-10}
+    - {m: maop, org: {l3_country: Mexico}, p: YTD-2026-10, v: PY}
+- id: res_now_for_chile
+  category: resume
+  resume: true
+  turns: ["What is the revenue of Canada this year?"]
+  q: now for Chile
+  tools: [get_pnl]
+  expect:
+    - {m: revenue, org: {l3_country: Chile}, p: YTD-2026-10}
+- id: res_same_business_q3
+  category: resume
+  resume: true
+  turns: ["Show me the P&L of Brazil for Q2 2026"]
+  q: what about Q3 2026?
+  tools: [get_pnl]
+  expect:
+    - {m: maop, org: {l3_country: Brazil}, p: Q-2026-3}
+- id: res_margins_us
+  category: resume
+  resume: true
+  turns: ["What is our profit % YTD?"]
+  q: now for the United States
+  tools: [get_ratio]
+  expect:
+    - {r: [maop, revenue], org: {l3_country: United States}, p: YTD-2026-10}
+    - {r: [maop, production], org: {l3_country: United States}, p: YTD-2026-10, text: true}
+- id: res_landing_canada
+  category: resume
+  resume: true
+  turns: ["What's the November landing for the United States?"]
+  q: and for Canada?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l3_country: Canada}, v: LANDING, p: M-2026-11}
+
+# ------------------------------------------------------------------------------- current-month landing (open month Nov 2026)
+- id: land_us_november
+  category: landing
+  q: What's the November landing for the United States?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l3_country: United States}, v: LANDING, p: M-2026-11}
+    - {m: maop, org: {l3_country: United States}, v: LANDING, p: M-2026-11}
+    - {r: [maop, revenue], org: {l3_country: United States}, v: LANDING, p: M-2026-11}
+- id: land_group_revenue
+  category: landing
+  q: Where will revenue land this month?
+  tools: [get_landing]
+  expect:
+    - {m: revenue, v: LANDING, p: M-2026-11}
+- id: land_bu
+  category: landing
+  q: What is the landing for US-BNI-HOU-01 this month?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l6_bu: US-BNI-HOU-01}, v: LANDING, p: M-2026-11}
+- id: land_business
+  category: landing
+  q: What's the November landing for Certification Houston?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l5_business: Certification Houston}, v: LANDING, p: M-2026-11}
+- id: land_profit_pct
+  category: landing
+  q: What's our profit % landing?
+  tools: [get_landing]
+  expect:
+    - {r: [maop, revenue], v: LANDING, p: M-2026-11}
+    - {r: [maop, production], v: LANDING, p: M-2026-11, text: true}
+- id: land_ytd_margin_fixture
+  category: landing
+  q: What will YTD MAOP margin be through November including the landing?
+  tools: [get_ytd_with_landing]
+  expect:
+    - {r: [maop, revenue], v: YTDL, p: YTD-2026-11}
+    - {r: [maop, production], v: YTDL, p: YTD-2026-11, text: true}
+    - {r: [maop, revenue], v: PY, p: YTD-2026-11}
+    - {r: [maop, revenue], v: Budget, p: YTD-2026-11}
+    - {r: [maop, revenue], v: FC3, p: YTD-2026-11}
+    - {r: [maop, production], v: PY, p: YTD-2026-11}
+- id: land_ytd_revenue_vs_budget
+  category: landing
+  q: Revenue YTD till November with landing vs budget
+  tools: [get_ytd_with_landing]
+  expect:
+    - {m: revenue, v: YTDL, p: YTD-2026-11}
+    - {m: revenue, v: Budget, p: YTD-2026-11}
+- id: land_bus_miss_budget
+  category: landing
+  q: Which BUs are expected to miss budget this month?
+  tools: [rank_landing]
+  expect:
+    - {rank: {d: [{m: billing, v: LANDING, p: M-2026-11}, {m: billing, v: Budget, p: M-2026-11}]}, level: l6_bu, asc: true, n: 1}
+- id: land_mexico_vs_forecast
+  category: landing
+  q: What's the landing for Mexico this month vs the latest forecast?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l3_country: Mexico}, v: LANDING, p: M-2026-11}
+    - {m: billing, org: {l3_country: Mexico}, v: FC3, p: M-2026-11}
+- id: land_brazil_vs_py
+  category: landing
+  q: How does the November landing for Brazil compare with last year?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l3_country: Brazil}, v: LANDING, p: M-2026-11}
+    - {m: billing, org: {l3_country: Brazil}, v: PY, p: M-2026-11}
+- id: land_closed_month
+  category: landing
+  q: What's the October landing for Canada?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l3_country: Canada}, p: M-2026-10}
+- id: land_future_month
+  category: landing
+  q: What's the December landing for Canada?
+  tools: [get_landing]
+  expect:
+    - {m: billing, org: {l3_country: Canada}, v: FC3, p: M-2026-12}
+- id: land_rls_refusal
+  category: landing
+  persona: us_country_head
+  q: What's the November landing for Canada?
+  status: refusal
+  rls: true
+- id: land_rls_scoped
+  category: landing
+  persona: us_country_head
+  q: What's the November landing?
+  tools: [get_landing]
+  rls: true
+  absent: [Canada, Mexico]
+  expect:
+    - {m: billing, org: {l3_country: United States}, v: LANDING, p: M-2026-11}
+- id: land_explain_bu
+  category: landing
+  q: Explain the landing for US-BNI-HOU-01
+  tools: [explain_landing]
+  expect:
+    - {m: billing, org: {l6_bu: US-BNI-HOU-01}, v: LANDING, p: M-2026-11}

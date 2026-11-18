@@ -1,10 +1,10 @@
-# RL Finance Copilot - application image (Streamlit UI + LangGraph agent + semantic layer).
+# IRIS - application image (Streamlit UI + LangGraph agent + semantic layer + landing engine).
 #
-#   docker build -t rl-finbot .
-#   docker run -p 8501:8501 --env-file .env rl-finbot
+#   docker build -t iris .
+#   docker run -p 8501:8501 --env-file .env iris
 #
 # Talks to SQL Server through Microsoft ODBC Driver 18 (DB_BACKEND=mssql) or reads a DuckDB file
-# (DB_BACKEND=duckdb, e.g. Hugging Face Spaces). The LLM is any LiteLLM model string (LLM_MODEL).
+# (DB_BACKEND=duckdb, for example on a laptop). The LLM is any LiteLLM model string (LLM_MODEL).
 FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -34,6 +34,10 @@ COPY config ./config
 COPY sql ./sql
 COPY scripts ./scripts
 COPY Makefile .env.example ./
+# Read by the UI at runtime: theme / hidden Deploy button, and the User Guide page with its screenshots
+COPY .streamlit ./.streamlit
+COPY docs/user_guide.md ./docs/user_guide.md
+COPY docs/img ./docs/img
 # Optional: a pre-built DuckDB file for the duckdb backend (created by `make data duckdb`)
 COPY data ./data
 

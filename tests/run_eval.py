@@ -12,7 +12,11 @@ and the run records:
   * numbers       expected values come from tests/eval_dsl.py (raw SQL on the base tables,
                   independent of the semantic layer): all must be in the tool output ("data"),
                   and the headline value(s) must appear in the answer text ("text")
-  * RLS           refusals return no table and no SQL; narrowed scopes return the scoped numbers
+  * RLS           refusals return no table and no SQL; narrowed scopes return the scoped numbers;
+                  `absent` names must not appear anywhere in the answer (e.g. other countries)
+  * sidebar       `ui_filters` are passed like the UI's sidebar filters (the question's words win)
+  * resume        `resume: true` stores the earlier turns in a conversation store, reloads them and asks
+                  the last question with the restored memory (no LLM call for the stored answers)
   * guardrail     passed first time / passed after one rewrite / templated fallback
   * latency       end-to-end seconds per question (last turn)
 Raw records: results/eval/<model>.jsonl (the run resumes where it stopped).
@@ -36,9 +40,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from app.agent.guardrails import extract_numbers  # noqa: E402
-from app.config import backend, env  # noqa: E402
+from app.config import data_as_of_date, backend, env  # noqa: E402
 
-AS_OF = date(2026, 11, 12)
+AS_OF = data_as_of_date()          # the app's default as-of date (settings.yaml)
 GOLDEN = ROOT / "tests" / "golden_questions.yaml"
 OUT = ROOT / "results" / "eval"
 TOL = {"eur": lambda v: max(1.0, abs(v) * 1e-6), "rate": lambda v: 1e-3, "pct": lambda v: 1e-6,
@@ -79,6 +83,8 @@ def in_data(exp: dict, nums: list[float], strs: set[str]) -> bool:
     v = exp["value"]
     if v is None:
         return False
+    if exp.get("names") is not None:                 # catalog: every expected name is in the output
+        return set(exp["names"]) <= strs
     tol = TOL[exp["fmt"]](v)
     ok = any(abs(a - abs(v)) <= tol for a in nums)
     if exp.get("name"):
@@ -90,6 +96,9 @@ def in_text(exp: dict, text: str) -> bool:
     v, fmt = exp["value"], exp["fmt"]
     if v is None:
         return False
+    names = exp.get("names")
+    if names and all(n.lower() in (text or "").lower() for n in names):
+        return True                                  # list questions: naming every item is as good as the count
     if exp.get("name") and exp["name"].lower() not in (text or "").lower():
         return False
     target = abs(v)
@@ -110,11 +119,17 @@ def run_question(item: dict, model: str) -> dict:
     from eval_dsl import evaluate
 
     persona = item.get("persona", "group_cfo")
+    ui = item.get("ui_filters") or None
     memory: dict = {}
+    turns = []
     for turn in item.get("turns", []):
-        _, memory = ask(turn, user_id=persona, memory=memory, model=model, as_of=AS_OF)
+        prev, memory = ask(turn, user_id=persona, memory=memory, model=model, as_of=AS_OF, ui_filters=ui)
+        turns.append((turn, prev.model_dump()))
+    resume_ok = None
+    if item.get("resume"):
+        memory, resume_ok = _resume(persona, turns, memory)
     t0 = time.time()
-    ans, new_mem = ask(item["q"], user_id=persona, memory=memory, model=model, as_of=AS_OF)
+    ans, new_mem = ask(item["q"], user_id=persona, memory=memory, model=model, as_of=AS_OF, ui_filters=ui)
     latency = time.time() - t0
     d = ans.diagnostics or {}
     exp_status = item.get("status", "ok")
@@ -124,6 +139,9 @@ def run_question(item: dict, model: str) -> dict:
            "tool_choice_source": d.get("tool_choice_source"), "tool_calls": d.get("tool_calls"),
            "errors": d.get("errors"), "answer": ans.answer_markdown,
            "llm_seconds": round(sum(c.get("latency", 0) for c in d.get("llm_calls", [])), 2)}
+    if resume_ok is not None:
+        rec["resume_ok"] = resume_ok
+        rec["status_ok"] = rec["status_ok"] and resume_ok
     if exp_status == "clarification" and item.get("options_min"):
         rec["options"] = list(d.get("options") or [])          # pushback: one button per part to change
         rec["status_ok"] = rec["status_ok"] and len(rec["options"]) >= item["options_min"]
@@ -156,6 +174,12 @@ def run_question(item: dict, model: str) -> dict:
         rec["text_ok"] = (any(tx) if item.get("text_mode") == "any" else all(tx)) if tx else None
     else:
         rec["data_ok"] = rec["text_ok"] = None
+    # names that must not appear (e.g. countries outside the persona's access)
+    absent = item.get("absent") or []
+    if absent:
+        blob = (ans.answer_markdown or "") + " " + " ".join(strs)
+        rec["absent_ok"] = not any(a in blob for a in absent)
+        rec["data_ok"] = bool(rec["data_ok"] if rec["data_ok"] is not None else True) and rec["absent_ok"]
     # RLS
     if item.get("rls"):
         if exp_status == "refusal":
@@ -180,6 +204,28 @@ def run_question(item: dict, model: str) -> dict:
     rec["guard_problems"] = [p for h in hist for p in (h.get("problems") or [])]
     rec["dropped_sentences"] = g.get("dropped") or []
     return rec
+
+
+def _resume(persona: str, turns: list[tuple[str, dict]], memory: dict) -> tuple[dict, bool]:
+    """Store the earlier turns like the UI does, reload them, and return (restored memory, payloads intact)."""
+    import tempfile
+
+    from sqlalchemy import create_engine
+
+    from app.history.store import ConversationStore
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = ConversationStore(engine=create_engine(f"sqlite:///{tmp}/history.sqlite"))
+        cid = store.create(persona, persona, turns[0][0] if turns else "resume")
+        for q, payload in turns:
+            store.add_message(persona, cid, "user", q)
+            store.add_message(persona, cid, "assistant", payload.get("answer_markdown") or "", payload)
+        store.save_state(persona, cid, {"memory": memory, "persona": persona})
+        _conv, msgs, state = store.load(persona, cid)
+        store.engine.dispose()
+    stored = [m["payload"] for m in msgs if m["role"] == "assistant"]
+    same = stored == [json.loads(json.dumps(p, default=str)) for _, p in turns]
+    return state.get("memory") or {}, bool(same)
 
 
 def run_model(model: str, items: list[dict], fresh: bool, limit: int | None) -> None:
@@ -337,8 +383,64 @@ def report(items: list[dict]) -> None:
                 lines.append(f"| {r['id']} | {r.get('status')} (exp. {r.get('expected_status')}) | {r.get('tool')} | "
                              f"{r.get('data_ok')} | {r.get('text_ok')} | {note[:180]} |")
         lines.append("")
+    lines += _rls_section(models) + _landing_section(models)
     (ROOT / "eval_report.md").write_text("\n".join(lines) + "\n")
     print(f"wrote eval_report.md ({len(models)} models)")
+
+
+def _rls_section(models: dict) -> list[str]:
+    out = ["## Row-level security", "",
+           "Questions asked by a restricted persona (United States Country Head or Environmental Lab Testing PL "
+           "Leader): out-of-scope requests must be refused without a table or SQL; in-scope requests must return "
+           "the scoped numbers, and other units' names must not appear.", "",
+           "| Model | RLS questions | Passed | Refusals correct | Scoped answers correct |", "|:---|---:|---:|---:|---:|"]
+    for m, recs in models.items():
+        rr = [r for r in recs if r.get("rls_ok") is not None]
+        ref = [r for r in rr if r.get("expected_status") == "refusal"]
+        sco = [r for r in rr if r.get("expected_status") != "refusal"]
+        out.append(f"| `{m}` | {len(rr)} | {_pct(_rate(rr, 'rls_ok'))} | {_pct(_rate(ref, 'rls_ok'))} | "
+                   f"{_pct(_rate(sco, 'rls_ok'))} |")
+    return out + [""]
+
+
+def _landing_section(models: dict) -> list[str]:
+    out = ["## Landing", "",
+           "Tool choice on the landing questions (category `landing`) and the landing engine's measured backtest "
+           "accuracy (`make backtest`, last 24 closed months; docs/landing_backtest_report.md).", "",
+           "| Model | Landing questions | Tool choice (final) | Tool choice (LLM alone) | Numbers in tool output | "
+           "Headline number in answer text |", "|:---|---:|---:|---:|---:|---:|"]
+    for m, recs in models.items():
+        lr = [r for r in recs if r.get("category") == "landing"]
+        if lr:
+            out.append(f"| `{m}` | {len(lr)} | {_pct(_rate(lr, 'tool_ok'))} | {_pct(_rate(lr, 'llm_tool_ok'))} | "
+                       f"{_pct(_rate(lr, 'data_ok'))} | {_pct(_rate(lr, 'text_ok'))} |")
+    out.append("")
+    try:
+        from app.db import get_engine
+        from app.landing import engine as LE
+        from app.landing.query import backtest_metrics
+        bt = backtest_metrics(get_engine("group_cfo"))
+    except Exception as exc:  # noqa: BLE001
+        return out + [f"Backtest metrics not available ({type(exc).__name__})."]
+    if bt.empty:
+        return out + ["No backtest has been run yet (`make backtest`)."]
+    g = bt[(bt.scope_type == "group") & (bt.metric == "wape")]
+    out += [f"Backtest run {bt['run_date'].iloc[0]}: group-level WAPE by method (lower is better).", "",
+            "| Method | Billing | Revenue | Operating profit (excl. WIP) | Operating profit (as booked) |",
+            "|:---|---:|---:|---:|---:|"]
+    for method in ("ensemble", LE.BASELINE, *LE.METHODS):
+        row = g[g.method == method].set_index("measure")["value"]
+        if row.empty:
+            continue
+        cell = lambda k: f"{100 * row[k]:.2f}%" if k in row.index else "n/a"  # noqa: E731
+        out.append(f"| {LE.METHOD_LABEL.get(method, method)} | {cell('billing')} | {cell('revenue')} | "
+                   f"{cell('maop_xw')} | {cell('maop')} |")
+    cov = bt[(bt.scope_type == "org_level") & (bt.measure == "billing") & (bt.method == "ensemble")
+             & bt.metric.str.startswith("coverage")]
+    if not cov.empty:
+        out += ["", "Share of actuals inside the P10-P90 range (billing, target 70-90%): " + "; ".join(
+            f"{r.scope_value} {100 * r.value:.1f}%" for r in cov.itertuples()) + "."]
+    return out + [""]
 
 
 def main() -> None:

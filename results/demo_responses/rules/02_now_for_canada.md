@@ -1,68 +1,69 @@
 # now for Canada
 
 - **Persona:** Group CFO
-- **Model:** `rules` · **status:** ok · **latency:** 0.27 s
+- **Model:** `rules` · **status:** ok · **latency:** 0.28 s
 - **Tool:** `get_pnl` (chosen by `router_fallback`) · **numeric guardrail:** n/a (no LLM)
 
 ## Answer
 
-**MAOP: Actual USD 26.1M; USD 1.1M (4.5%) above PY (USD 25.0M), favourable; USD 1.7M (6.2%) below Budget (USD 27.8M), unfavourable.**
+**Operating profit: Actual USD 21.5M; USD 5.9M (21.7%) below PY (USD 27.4M), unfavourable; USD 13.6M (38.8%) below Budget (USD 35.1M), unfavourable.**
 
-MAOP vs PY: increase of USD 1.1M driven by Production (USD 8.0M higher, favourable) and Functional neutralization (USD 234k higher, favourable), partly offset by Personnel charges (USD 3.9M higher, unfavourable) and Other costs (USD 1.6M higher, unfavourable).
+Operating profit vs PY: decrease of USD 5.9M driven by Production (USD 4.2M lower, unfavourable) and Personnel costs (USD 1.0M higher, unfavourable), partly offset by Functional cost recharges (USD 230k higher, favourable) and Other costs (USD 203k lower, favourable).
 
-- Production: Actual USD 178.3M; USD 8.0M (4.7%) above PY (USD 170.3M), favourable; USD 5.1M (2.8%) below Budget (USD 183.4M), unfavourable
-- Personnel charges: Actual USD 87.3M; USD 3.9M (4.7%) higher than PY (USD 83.3M), unfavourable; USD 2.0M (2.2%) lower than Budget (USD 89.3M), favourable
-- Other costs: Actual USD 38.9M; USD 1.6M (4.4%) higher than PY (USD 37.3M), unfavourable; USD 924k (2.3%) lower than Budget (USD 39.9M), favourable
-- MAOP margin (on revenue): Actual 14.7%; 0.0 pp below PY (14.7%), unfavourable; 0.5 pp below Budget (15.2%), unfavourable
+- Production: Actual USD 177.8M; USD 4.2M (2.3%) below PY (USD 182.1M), unfavourable; USD 22.5M (11.3%) below Budget (USD 200.4M), unfavourable
+- Personnel costs: Actual USD 88.7M; USD 1.0M (1.1%) higher than PY (USD 87.7M), unfavourable; USD 4.9M (5.2%) lower than Budget (USD 93.7M), favourable
+- Functional costs: Actual USD 19.6M; USD 948k (5.1%) higher than PY (USD 18.6M), unfavourable; USD 277k (1.4%) lower than Budget (USD 19.9M), favourable
+- Operating margin on revenue: Actual 12.1%; 3.0 pp below PY (15.1%), unfavourable; 5.5 pp below Budget (17.6%), unfavourable
 
 ## Table
 
 | Line | Actual | PY | Budget | Var vs PY | Var % vs PY | Var vs Budget | Var % vs Budget |
 |:---|---:|---:|---:|---:|---:|---:|---:|
-| 1 Billing | 174,491 | 166,282 | 179,314 | 8,208 | 4.9% | (4,824) | (2.7%) |
-| 2 WIP & UI | 3,157 | 3,363 | 3,381 | (206) | (6.1%) | (224) | (6.6%) |
-| **3 REVENUE** | **177,648** | **169,645** | **182,696** | **8,003** | **4.7%** | **(5,048)** | **(2.8%)** |
-| 4 Intragroup revenue | 7,999 | 7,685 | 8,257 | 314 | 4.1% | (258) | (3.1%) |
-| 5 Intragroup subcontracting | (7,359) | (7,041) | (7,573) | (318) | (4.5%) | 214 | 2.8% |
-| **6 PRODUCTION** | **178,288** | **170,289** | **183,380** | **7,999** | **4.7%** | **(5,092)** | **(2.8%)** |
-| 7 Personnel charges | (87,265) | (83,335) | (89,261) | (3,929) | (4.7%) | 1,996 | 2.2% |
-| 8 External subcontracting | (11,571) | (10,983) | (11,793) | (588) | (5.4%) | 221 | 1.9% |
-| 9 Other costs | (38,933) | (37,289) | (39,857) | (1,644) | (4.4%) | 924 | 2.3% |
-| 10 Functional neutralization | 4,473 | 4,238 | 4,536 | 234 | 5.5% | (63) | (1.4%) |
-| **11 GROSS PROFIT** | **44,991** | **42,919** | **47,005** | **2,072** | **4.8%** | **(2,014)** | **(4.3%)** |
-| 12 Total functional costs | (18,898) | (17,950) | (19,184) | (948) | (5.3%) | 287 | 1.5% |
-| **13 MAOP** | **26,093** | **24,970** | **27,821** | **1,124** | **4.5%** | **(1,727)** | **(6.2%)** |
-| 17 Other operating expenses | (1,294) | (1,246) | (1,244) | (48) | (3.8%) | (50) | (4.0%) |
-| **18 MANAGEMENT OP** | **24,799** | **23,723** | **26,577** | **1,076** | **4.5%** | **(1,777)** | **(6.7%)** |
-| 19 Financial result | (1,089) | (1,009) | (1,082) | (80) | (7.9%) | (6) | (0.6%) |
-| 20 Corporate taxes | (6,283) | (6,019) | (6,756) | (264) | (4.4%) | 473 | 7.0% |
-| **21 NET INCOME** | **17,427** | **16,695** | **18,738** | **732** | **4.4%** | **(1,311)** | **(7.0%)** |
-| MAOP margin (on revenue) | 14.7% | 14.7% | 15.2% | 0.0 pp |  | (0.5 pp) |  |
-| Gross margin | 25.2% | 25.2% | 25.6% | 0.0 pp |  | (0.4 pp) |  |
-| Direct margin | 62.7% | 62.7% | 62.9% | 0.0 pp |  | (0.2 pp) |  |
-| Personnel charges / Production | 48.9% | 48.9% | 48.7% | 0.0 pp |  | 0.3 pp |  |
-| Total FTE (average) | 1,062 | 1,044 | 1,074 | 18 | 1.8% | (13) | (1.2%) |
-| Total headcount (average) | 1,129 | 1,109 | 1,142 | 20 | 1.8% | (13) | (1.2%) |
+| Billing | 173,949 | 178,110 | 195,856 | (4,161) | (2.3%) | (21,907) | (11.2%) |
+| WIP & deferred income | 3,260 | 3,243 | 3,723 | 18 | 0.6% | (462) | (12.4%) |
+| **REVENUE** | **177,209** | **181,352** | **199,579** | **(4,143)** | **(2.3%)** | **(22,369)** | **(11.2%)** |
+| Intragroup revenue | 8,108 | 8,340 | 9,204 | (232) | (2.8%) | (1,096) | (11.9%) |
+| Intragroup subcontracting | (7,468) | (7,617) | (8,384) | 149 | 2.0% | 916 | 10.9% |
+| **PRODUCTION** | **177,850** | **182,075** | **200,398** | **(4,225)** | **(2.3%)** | **(22,549)** | **(11.3%)** |
+| Personnel costs | (88,746) | (87,743) | (93,662) | (1,003) | (1.1%) | 4,916 | 5.2% |
+| External subcontracting | (14,943) | (14,747) | (15,942) | (196) | (1.3%) | 999 | 6.3% |
+| Other costs | (37,772) | (37,976) | (40,594) | 203 | 0.5% | 2,821 | 6.9% |
+| Functional cost recharges | 4,662 | 4,432 | 4,732 | 230 | 5.2% | (70) | (1.5%) |
+| **GROSS PROFIT** | **41,051** | **46,042** | **54,933** | **(4,991)** | **(10.8%)** | **(13,883)** | **(25.3%)** |
+| Functional costs | (19,595) | (18,647) | (19,872) | (948) | (5.1%) | 277 | 1.4% |
+| **OPERATING PROFIT** | **21,456** | **27,395** | **35,062** | **(5,939)** | **(21.7%)** | **(13,606)** | **(38.8%)** |
+| Other operating expenses | (2,338) | (1,127) | (1,162) | (1,211) | (107.5%) | (1,176) | (101.2%) |
+| **EBIT** | **19,118** | **26,268** | **33,900** | **(7,150)** | **(27.2%)** | **(14,782)** | **(43.6%)** |
+| Financial result | (1,106) | (1,100) | (1,126) | (7) | (0.6%) | 20 | 1.7% |
+| Income taxes | (4,773) | (6,670) | (8,685) | 1,897 | 28.4% | 3,912 | 45.0% |
+| **NET INCOME** | **13,238** | **18,499** | **24,089** | **(5,260)** | **(28.4%)** | **(10,850)** | **(45.0%)** |
+| Operating margin on revenue | 12.1% | 15.1% | 17.6% | (3.0 pp) |  | (5.5 pp) |  |
+| Operating margin on production | 12.1% | 15.0% | 17.5% | (3.0 pp) |  | (5.4 pp) |  |
+| Gross margin | 23.1% | 25.3% | 27.4% | (2.2 pp) |  | (4.3 pp) |  |
+| Direct margin | 61.5% | 62.9% | 64.0% | (1.3 pp) |  | (2.5 pp) |  |
+| Personnel costs / Production | 49.9% | 48.2% | 46.7% | 1.7 pp |  | 3.2 pp |  |
+| Total FTE (average) | 1,076 | 1,094 | 1,127 | (18) | (1.6%) | (51) | (4.5%) |
+| Total headcount (average) | 1,147 | 1,164 | 1,197 | (17) | (1.5%) | (50) | (4.2%) |
 
 _USD k · Signed values: costs negative. Variances are profit impact (positive = favourable)._
 
 ## Chart
 
-`waterfall` - MAOP bridge PY to Actual - Canada (YTD Oct 2026) ([interactive chart](02_now_for_canada_chart.html))
+`waterfall` - Operating profit bridge PY to Actual - Canada (YTD Oct 2026) ([interactive chart](02_now_for_canada_chart.html))
 
 ## Filters, version and period used
 
 - Scope: Canada
 - Period: YTD Oct 2026 (Jan 2026 - Oct 2026)
 - Versions: Actual (Actual, YTD Oct 2026), PY (Actual, YTD Oct 2025), Budget (Budget, YTD Oct 2026)
-- Currency: USD at B26 (constant budget rate)
-- As-of date: 2026-11-12 · row-level security: SQL Server SECURITY POLICY (SESSION_CONTEXT)
+- Currency: USD at constant budget rate
+- As-of date: 2026-11-16 · row-level security: SQL Server SECURITY POLICY (SESSION_CONTEXT)
 
 ## Follow-up questions
 
-1. What are the main drivers of the MAOP variance vs budget for Canada?
-2. Show the monthly MAOP trend for Canada vs last year
-3. Which product lines in Canada have the lowest MAOP margin this year?
+1. What are the main drivers of the operating profit variance vs budget for Canada?
+2. Show the monthly operating profit trend for Canada vs last year
+3. Which product lines in Canada have the lowest operating margin this year?
 
 ## Diagnostics
 
@@ -94,6 +95,9 @@ _USD k · Signed values: costs negative. Variances are profit impact (positive =
           "<empty>"
         ],
         "checked": 0,
+        "problems": [
+          "the answer was empty"
+        ],
         "draft": ""
       }
     ],
@@ -103,9 +107,9 @@ _USD k · Signed values: costs negative. Variances are profit impact (positive =
   },
   "errors": [],
   "timings": {
-    "preprocess": 0.009,
+    "preprocess": 0.006,
     "plan": 0.0,
-    "act": 0.254,
+    "act": 0.263,
     "write#1": 0.0
   }
 }

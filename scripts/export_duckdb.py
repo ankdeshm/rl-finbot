@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Build the DuckDB file (same schema, same rows, same views) from the generated Parquet files.
 
-DuckDB is the lightweight backend (DB_BACKEND=duckdb) used for Hugging Face Spaces or a laptop
+DuckDB is the lightweight backend (DB_BACKEND=duckdb) used on a laptop
 without SQL Server. Row-level security is enforced in Python in this mode.
 """
 from __future__ import annotations

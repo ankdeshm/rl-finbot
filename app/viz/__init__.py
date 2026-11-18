@@ -1,1 +1,1 @@
-"""RL FinBot."""
+"""Charts and finance tables."""

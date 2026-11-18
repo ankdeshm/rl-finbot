@@ -1,5 +1,5 @@
 {
-  "answer_markdown": "**KPI cockpit for Canada: MTD = Oct 2026, YTD = Jan-Oct 2026; Actual vs LY (prior year) and vs Budget; USD at budget rate.**\n\n- Direct margin: MTD 65.0% (0.6 pp below LY, unfavourable; 0.5 pp below Budget, unfavourable); YTD 62.7% (0.0 pp above LY, favourable; 0.2 pp below Budget, unfavourable)\n- Utilization rate (billable / available hours): MTD 81.7% (1.3 pp below LY, unfavourable; 1.2 pp below Budget, unfavourable); YTD 82.6% (0.2 pp below LY, unfavourable; 0.3 pp below Budget, unfavourable)\n- Production per FTE (annualised): MTD USD 217k (1.0% above LY, favourable; 1.6% below Budget, unfavourable); YTD USD 201k (2.9% above LY, favourable; 1.6% below Budget, unfavourable)\n- Overtime ratio (overtime / available hours): MTD 11.7% (0.5 pp below LY, favourable; 0.5 pp below Budget, favourable); YTD 10.0% (0.1 pp below LY, favourable; 0.2 pp below Budget, favourable)",
+  "answer_markdown": "**KPI cockpit for Canada: MTD = Oct 2026, YTD = Jan-Oct 2026; Actual vs LY (prior year) and vs Budget; USD at budget rate.**\n\n- Direct margin: MTD 61.4% (3.0 pp below LY, unfavourable; 2.9 pp below Budget, unfavourable); YTD 61.5% (1.3 pp below LY, unfavourable; 2.5 pp below Budget, unfavourable)\n- Utilization rate (billable / available hours): MTD 73.7% (4.5 pp below LY, unfavourable; 2.5 pp below Budget, unfavourable); YTD 73.3% (2.7 pp below LY, unfavourable; 2.9 pp below Budget, unfavourable)\n- Production per FTE (annualised): MTD USD 199k (5.2% below LY, unfavourable; 7.6% below Budget, unfavourable); YTD USD 198k (0.7% below LY, unfavourable; 7.0% below Budget, unfavourable)\n- Overtime ratio (overtime / available hours): MTD 7.0% (1.3 pp below LY, favourable; 0.9 pp below Budget, favourable); YTD 6.0% (0.6 pp below LY, favourable; 0.7 pp below Budget, favourable)",
   "table": [
     {
       "KPI": "Direct margin",
@@ -7,15 +7,15 @@
       "_fmt": "pct",
       "_kind": "line",
       "_favorable": "up",
-      "MTD": 0.6495329374134475,
-      "MTD vs LY": -0.005790368092499776,
+      "MTD": 0.6141131990046498,
+      "MTD vs LY": -0.030261443482576533,
       "_fav_MTD vs LY": false,
-      "MTD vs Budget": -0.004721405369913945,
+      "MTD vs Budget": -0.029115660351703765,
       "_fav_MTD vs Budget": false,
-      "YTD": 0.626775430703886,
-      "YTD vs LY": 0.00010569762649037528,
-      "_fav_YTD vs LY": true,
-      "YTD vs Budget": -0.002009968366615711,
+      "YTD": 0.6154031107267633,
+      "YTD vs LY": -0.013329053682378134,
+      "_fav_YTD vs LY": false,
+      "YTD vs Budget": -0.024566971378686242,
       "_fav_YTD vs Budget": false
     },
     {
@@ -24,32 +24,32 @@
       "_fmt": "eur",
       "_kind": "line",
       "_favorable": "up",
-      "MTD": 19358530.87,
-      "MTD vs LY": 0.0268051658474112,
-      "_fav_MTD vs LY": true,
-      "MTD vs Budget": -0.02058973550042077,
+      "MTD": 17569469.68,
+      "MTD vs LY": -0.08684305654739709,
+      "_fav_MTD vs LY": false,
+      "MTD vs Budget": -0.13150142492910644,
       "_fav_MTD vs Budget": false,
-      "YTD": 178287575.82999995,
-      "YTD vs LY": 0.04697250069946348,
-      "_fav_YTD vs LY": true,
-      "YTD vs Budget": -0.027769214031350343,
+      "YTD": 177849684.69000003,
+      "YTD vs LY": -0.0232064571794561,
+      "_fav_YTD vs LY": false,
+      "YTD vs Budget": -0.11251857939285642,
       "_fav_YTD vs Budget": false
     },
     {
-      "KPI": "Direct labor cost (7A)",
+      "KPI": "Direct staff costs",
       "_code": "personnel_7a",
       "_fmt": "eur",
       "_kind": "line",
       "_favorable": "down",
-      "MTD": 6784527.45,
-      "MTD vs LY": 0.044054895708794145,
-      "_fav_MTD vs LY": false,
-      "MTD vs Budget": -0.007215184625701433,
+      "MTD": 6779826.45,
+      "MTD vs LY": -0.00913924085697433,
+      "_fav_MTD vs LY": true,
+      "MTD vs Budget": -0.060624308909904084,
       "_fav_MTD vs Budget": true,
-      "YTD": 66541303.7,
-      "YTD vs LY": 0.04667608083177683,
+      "YTD": 68400435.49,
+      "YTD vs LY": 0.011861847480264854,
       "_fav_YTD vs LY": false,
-      "YTD vs Budget": -0.02250499996230818,
+      "YTD vs Budget": -0.05196047137040785,
       "_fav_YTD vs Budget": true
     },
     {
@@ -58,15 +58,15 @@
       "_fmt": "pct",
       "_kind": "line",
       "_favorable": "up",
-      "MTD": 0.8174743561396256,
-      "MTD vs LY": -0.013186860137723744,
+      "MTD": 0.7374237679710525,
+      "MTD vs LY": -0.045099594344197524,
       "_fav_MTD vs LY": false,
-      "MTD vs Budget": -0.011522122311851235,
+      "MTD vs Budget": -0.02471116405706819,
       "_fav_MTD vs Budget": false,
-      "YTD": 0.8262030388463695,
-      "YTD vs LY": -0.0019255879415412958,
+      "YTD": 0.7330914831933724,
+      "YTD vs LY": -0.0269724664472909,
       "_fav_YTD vs LY": false,
-      "YTD vs Budget": -0.002793300493231232,
+      "YTD vs Budget": -0.029042886207539143,
       "_fav_YTD vs Budget": false
     },
     {
@@ -75,15 +75,15 @@
       "_fmt": "eur",
       "_kind": "line",
       "_favorable": "up",
-      "MTD": 189.71251737040066,
-      "MTD vs LY": 0.023617323691771983,
+      "MTD": 190.85922572038766,
+      "MTD vs LY": 0.00260217316863845,
       "_fav_MTD vs LY": true,
-      "MTD vs Budget": -0.0035721877310080272,
+      "MTD vs Budget": -0.04480969136278908,
       "_fav_MTD vs Budget": false,
-      "YTD": 180.2184179379453,
-      "YTD vs LY": 0.0300383583103789,
+      "YTD": 198.10494455669362,
+      "YTD vs LY": 0.028280373136644745,
       "_fav_YTD vs LY": true,
-      "YTD vs Budget": -0.013762329167511005,
+      "YTD vs Budget": -0.032514209480259515,
       "_fav_YTD vs Budget": false
     },
     {
@@ -92,15 +92,15 @@
       "_fmt": "eur",
       "_kind": "line",
       "_favorable": "up",
-      "MTD": 217279.65508726638,
-      "MTD vs LY": 0.0101997995553428,
-      "_fav_MTD vs LY": true,
-      "MTD vs Budget": -0.015697905793901845,
+      "MTD": 199049.883081571,
+      "MTD vs LY": -0.051841006033636026,
+      "_fav_MTD vs LY": false,
+      "MTD vs Budget": -0.07572794203982938,
       "_fav_MTD vs Budget": false,
-      "YTD": 201480.12038795816,
-      "YTD vs LY": 0.02896468451083091,
-      "_fav_YTD vs LY": true,
-      "YTD vs Budget": -0.01622092511812244,
+      "YTD": 198330.62748866258,
+      "YTD vs LY": -0.006885414227339778,
+      "_fav_YTD vs LY": false,
+      "YTD vs Budget": -0.0703416038428515,
       "_fav_YTD vs Budget": false
     },
     {
@@ -109,49 +109,49 @@
       "_fmt": "pct",
       "_kind": "line",
       "_favorable": "down",
-      "MTD": 0.11683057587730683,
-      "MTD vs LY": -0.005237294861582406,
+      "MTD": 0.07033413520656046,
+      "MTD vs LY": -0.0130579103799556,
       "_fav_MTD vs LY": true,
-      "MTD vs Budget": -0.004553448589869294,
+      "MTD vs Budget": -0.009199625653169577,
       "_fav_MTD vs Budget": true,
-      "YTD": 0.10035321866267977,
-      "YTD vs LY": -0.0010712559997503035,
+      "YTD": 0.06014951146690907,
+      "YTD vs LY": -0.006173349612798848,
       "_fav_YTD vs LY": true,
-      "YTD vs Budget": -0.001682423748773032,
+      "YTD vs Budget": -0.0067079654888314855,
       "_fav_YTD vs Budget": true
     },
     {
-      "KPI": "Production hourly cost (direct labor per billable hour)",
+      "KPI": "Production hourly cost (direct staff cost per billable hour)",
       "_code": "production_hourly_cost",
       "_fmt": "eur",
       "_kind": "line",
       "_favorable": "down",
-      "MTD": 66.48798869870465,
-      "MTD vs LY": 0.040813499658166406,
+      "MTD": 73.65005605368987,
+      "MTD vs LY": 0.0879172058509221,
       "_fav_MTD vs LY": false,
-      "MTD vs Budget": 0.010034749985727238,
+      "MTD vs Budget": 0.033142231955186244,
       "_fav_MTD vs Budget": false,
-      "YTD": 67.2619414141167,
-      "YTD vs LY": 0.029746732853474806,
+      "YTD": 76.19054542615139,
+      "YTD vs LY": 0.06519712966703926,
       "_fav_YTD vs LY": false,
-      "YTD vs Budget": -0.008422273804994171,
-      "_fav_YTD vs Budget": true
+      "YTD vs Budget": 0.03350307003912081,
+      "_fav_YTD vs Budget": false
     },
     {
-      "KPI": "Direct labor cost / Production",
+      "KPI": "Direct staff costs / Production",
       "_code": "direct_labor_to_production",
       "_fmt": "pct",
       "_kind": "line",
       "_favorable": "down",
-      "MTD": 0.3504670625865526,
-      "MTD vs LY": 0.005790368092499831,
+      "MTD": 0.3858868009953503,
+      "MTD vs LY": 0.030261443482576533,
       "_fav_MTD vs LY": false,
-      "MTD vs Budget": 0.004721405369914,
+      "MTD vs Budget": 0.02911566035170382,
       "_fav_MTD vs Budget": false,
-      "YTD": 0.37322456929611403,
-      "YTD vs LY": -0.00010569762649037528,
-      "_fav_YTD vs LY": true,
-      "YTD vs Budget": 0.002009968366615711,
+      "YTD": 0.38459688927323665,
+      "YTD vs LY": 0.013329053682378189,
+      "_fav_YTD vs LY": false,
+      "YTD vs Budget": 0.024566971378686187,
       "_fav_YTD vs Budget": false
     },
     {
@@ -160,32 +160,32 @@
       "_fmt": "pct",
       "_kind": "line",
       "_favorable": "up",
-      "MTD": 0.285881618143681,
-      "MTD vs LY": -0.008053981188805903,
+      "MTD": 0.22833731484603356,
+      "MTD vs LY": -0.046539570159351534,
       "_fav_MTD vs LY": false,
-      "MTD vs Budget": -0.009667699539737673,
+      "MTD vs Budget": -0.04968863964754719,
       "_fav_MTD vs Budget": false,
-      "YTD": 0.2523509217652923,
-      "YTD vs LY": 0.00031160619435349757,
-      "_fav_YTD vs LY": true,
-      "YTD vs Budget": -0.003975580022346936,
+      "YTD": 0.23081702670180881,
+      "YTD vs LY": -0.022056198625004075,
+      "_fav_YTD vs LY": false,
+      "YTD vs Budget": -0.04330464520647437,
       "_fav_YTD vs Budget": false
     },
     {
-      "KPI": "MAOP margin (on revenue)",
+      "KPI": "Operating margin on revenue",
       "_code": "maop_margin_revenue",
       "_fmt": "pct",
       "_kind": "line",
       "_favorable": "up",
-      "MTD": 0.18769555271665336,
-      "MTD vs LY": -0.010438930372739241,
+      "MTD": 0.11585836709244224,
+      "MTD vs LY": -0.061571029839205704,
       "_fav_MTD vs LY": false,
-      "MTD vs Budget": -0.011536838490507267,
+      "MTD vs Budget": -0.06459898685377058,
       "_fav_MTD vs Budget": false,
-      "YTD": 0.14688285155822323,
-      "YTD vs LY": -0.0003050591429035743,
+      "YTD": 0.12107516342923556,
+      "YTD vs LY": -0.029982174554382943,
       "_fav_YTD vs LY": false,
-      "YTD vs Budget": -0.00539588441892816,
+      "YTD vs Budget": -0.054603463501203056,
       "_fav_YTD vs Budget": false
     }
   ],
@@ -206,15 +206,15 @@
         "_fmt": "pct",
         "_kind": "line",
         "_favorable": "up",
-        "MTD": 0.6495329374134475,
-        "MTD vs LY": -0.005790368092499776,
+        "MTD": 0.6141131990046498,
+        "MTD vs LY": -0.030261443482576533,
         "_fav_MTD vs LY": false,
-        "MTD vs Budget": -0.004721405369913945,
+        "MTD vs Budget": -0.029115660351703765,
         "_fav_MTD vs Budget": false,
-        "YTD": 0.626775430703886,
-        "YTD vs LY": 0.00010569762649037528,
-        "_fav_YTD vs LY": true,
-        "YTD vs Budget": -0.002009968366615711,
+        "YTD": 0.6154031107267633,
+        "YTD vs LY": -0.013329053682378134,
+        "_fav_YTD vs LY": false,
+        "YTD vs Budget": -0.024566971378686242,
         "_fav_YTD vs Budget": false
       },
       {
@@ -223,32 +223,32 @@
         "_fmt": "eur",
         "_kind": "line",
         "_favorable": "up",
-        "MTD": 19358530.87,
-        "MTD vs LY": 0.0268051658474112,
-        "_fav_MTD vs LY": true,
-        "MTD vs Budget": -0.02058973550042077,
+        "MTD": 17569469.68,
+        "MTD vs LY": -0.08684305654739709,
+        "_fav_MTD vs LY": false,
+        "MTD vs Budget": -0.13150142492910644,
         "_fav_MTD vs Budget": false,
-        "YTD": 178287575.82999995,
-        "YTD vs LY": 0.04697250069946348,
-        "_fav_YTD vs LY": true,
-        "YTD vs Budget": -0.027769214031350343,
+        "YTD": 177849684.69000003,
+        "YTD vs LY": -0.0232064571794561,
+        "_fav_YTD vs LY": false,
+        "YTD vs Budget": -0.11251857939285642,
         "_fav_YTD vs Budget": false
       },
       {
-        "KPI": "Direct labor cost (7A)",
+        "KPI": "Direct staff costs",
         "_code": "personnel_7a",
         "_fmt": "eur",
         "_kind": "line",
         "_favorable": "down",
-        "MTD": 6784527.45,
-        "MTD vs LY": 0.044054895708794145,
-        "_fav_MTD vs LY": false,
-        "MTD vs Budget": -0.007215184625701433,
+        "MTD": 6779826.45,
+        "MTD vs LY": -0.00913924085697433,
+        "_fav_MTD vs LY": true,
+        "MTD vs Budget": -0.060624308909904084,
         "_fav_MTD vs Budget": true,
-        "YTD": 66541303.7,
-        "YTD vs LY": 0.04667608083177683,
+        "YTD": 68400435.49,
+        "YTD vs LY": 0.011861847480264854,
         "_fav_YTD vs LY": false,
-        "YTD vs Budget": -0.02250499996230818,
+        "YTD vs Budget": -0.05196047137040785,
         "_fav_YTD vs Budget": true
       },
       {
@@ -257,15 +257,15 @@
         "_fmt": "pct",
         "_kind": "line",
         "_favorable": "up",
-        "MTD": 0.8174743561396256,
-        "MTD vs LY": -0.013186860137723744,
+        "MTD": 0.7374237679710525,
+        "MTD vs LY": -0.045099594344197524,
         "_fav_MTD vs LY": false,
-        "MTD vs Budget": -0.011522122311851235,
+        "MTD vs Budget": -0.02471116405706819,
         "_fav_MTD vs Budget": false,
-        "YTD": 0.8262030388463695,
-        "YTD vs LY": -0.0019255879415412958,
+        "YTD": 0.7330914831933724,
+        "YTD vs LY": -0.0269724664472909,
         "_fav_YTD vs LY": false,
-        "YTD vs Budget": -0.002793300493231232,
+        "YTD vs Budget": -0.029042886207539143,
         "_fav_YTD vs Budget": false
       },
       {
@@ -274,15 +274,15 @@
         "_fmt": "eur",
         "_kind": "line",
         "_favorable": "up",
-        "MTD": 189.71251737040066,
-        "MTD vs LY": 0.023617323691771983,
+        "MTD": 190.85922572038766,
+        "MTD vs LY": 0.00260217316863845,
         "_fav_MTD vs LY": true,
-        "MTD vs Budget": -0.0035721877310080272,
+        "MTD vs Budget": -0.04480969136278908,
         "_fav_MTD vs Budget": false,
-        "YTD": 180.2184179379453,
-        "YTD vs LY": 0.0300383583103789,
+        "YTD": 198.10494455669362,
+        "YTD vs LY": 0.028280373136644745,
         "_fav_YTD vs LY": true,
-        "YTD vs Budget": -0.013762329167511005,
+        "YTD vs Budget": -0.032514209480259515,
         "_fav_YTD vs Budget": false
       },
       {
@@ -291,15 +291,15 @@
         "_fmt": "eur",
         "_kind": "line",
         "_favorable": "up",
-        "MTD": 217279.65508726638,
-        "MTD vs LY": 0.0101997995553428,
-        "_fav_MTD vs LY": true,
-        "MTD vs Budget": -0.015697905793901845,
+        "MTD": 199049.883081571,
+        "MTD vs LY": -0.051841006033636026,
+        "_fav_MTD vs LY": false,
+        "MTD vs Budget": -0.07572794203982938,
         "_fav_MTD vs Budget": false,
-        "YTD": 201480.12038795816,
-        "YTD vs LY": 0.02896468451083091,
-        "_fav_YTD vs LY": true,
-        "YTD vs Budget": -0.01622092511812244,
+        "YTD": 198330.62748866258,
+        "YTD vs LY": -0.006885414227339778,
+        "_fav_YTD vs LY": false,
+        "YTD vs Budget": -0.0703416038428515,
         "_fav_YTD vs Budget": false
       },
       {
@@ -308,49 +308,49 @@
         "_fmt": "pct",
         "_kind": "line",
         "_favorable": "down",
-        "MTD": 0.11683057587730683,
-        "MTD vs LY": -0.005237294861582406,
+        "MTD": 0.07033413520656046,
+        "MTD vs LY": -0.0130579103799556,
         "_fav_MTD vs LY": true,
-        "MTD vs Budget": -0.004553448589869294,
+        "MTD vs Budget": -0.009199625653169577,
         "_fav_MTD vs Budget": true,
-        "YTD": 0.10035321866267977,
-        "YTD vs LY": -0.0010712559997503035,
+        "YTD": 0.06014951146690907,
+        "YTD vs LY": -0.006173349612798848,
         "_fav_YTD vs LY": true,
-        "YTD vs Budget": -0.001682423748773032,
+        "YTD vs Budget": -0.0067079654888314855,
         "_fav_YTD vs Budget": true
       },
       {
-        "KPI": "Production hourly cost (direct labor per billable hour)",
+        "KPI": "Production hourly cost (direct staff cost per billable hour)",
         "_code": "production_hourly_cost",
         "_fmt": "eur",
         "_kind": "line",
         "_favorable": "down",
-        "MTD": 66.48798869870465,
-        "MTD vs LY": 0.040813499658166406,
+        "MTD": 73.65005605368987,
+        "MTD vs LY": 0.0879172058509221,
         "_fav_MTD vs LY": false,
-        "MTD vs Budget": 0.010034749985727238,
+        "MTD vs Budget": 0.033142231955186244,
         "_fav_MTD vs Budget": false,
-        "YTD": 67.2619414141167,
-        "YTD vs LY": 0.029746732853474806,
+        "YTD": 76.19054542615139,
+        "YTD vs LY": 0.06519712966703926,
         "_fav_YTD vs LY": false,
-        "YTD vs Budget": -0.008422273804994171,
-        "_fav_YTD vs Budget": true
+        "YTD vs Budget": 0.03350307003912081,
+        "_fav_YTD vs Budget": false
       },
       {
-        "KPI": "Direct labor cost / Production",
+        "KPI": "Direct staff costs / Production",
         "_code": "direct_labor_to_production",
         "_fmt": "pct",
         "_kind": "line",
         "_favorable": "down",
-        "MTD": 0.3504670625865526,
-        "MTD vs LY": 0.005790368092499831,
+        "MTD": 0.3858868009953503,
+        "MTD vs LY": 0.030261443482576533,
         "_fav_MTD vs LY": false,
-        "MTD vs Budget": 0.004721405369914,
+        "MTD vs Budget": 0.02911566035170382,
         "_fav_MTD vs Budget": false,
-        "YTD": 0.37322456929611403,
-        "YTD vs LY": -0.00010569762649037528,
-        "_fav_YTD vs LY": true,
-        "YTD vs Budget": 0.002009968366615711,
+        "YTD": 0.38459688927323665,
+        "YTD vs LY": 0.013329053682378189,
+        "_fav_YTD vs LY": false,
+        "YTD vs Budget": 0.024566971378686187,
         "_fav_YTD vs Budget": false
       },
       {
@@ -359,32 +359,32 @@
         "_fmt": "pct",
         "_kind": "line",
         "_favorable": "up",
-        "MTD": 0.285881618143681,
-        "MTD vs LY": -0.008053981188805903,
+        "MTD": 0.22833731484603356,
+        "MTD vs LY": -0.046539570159351534,
         "_fav_MTD vs LY": false,
-        "MTD vs Budget": -0.009667699539737673,
+        "MTD vs Budget": -0.04968863964754719,
         "_fav_MTD vs Budget": false,
-        "YTD": 0.2523509217652923,
-        "YTD vs LY": 0.00031160619435349757,
-        "_fav_YTD vs LY": true,
-        "YTD vs Budget": -0.003975580022346936,
+        "YTD": 0.23081702670180881,
+        "YTD vs LY": -0.022056198625004075,
+        "_fav_YTD vs LY": false,
+        "YTD vs Budget": -0.04330464520647437,
         "_fav_YTD vs Budget": false
       },
       {
-        "KPI": "MAOP margin (on revenue)",
+        "KPI": "Operating margin on revenue",
         "_code": "maop_margin_revenue",
         "_fmt": "pct",
         "_kind": "line",
         "_favorable": "up",
-        "MTD": 0.18769555271665336,
-        "MTD vs LY": -0.010438930372739241,
+        "MTD": 0.11585836709244224,
+        "MTD vs LY": -0.061571029839205704,
         "_fav_MTD vs LY": false,
-        "MTD vs Budget": -0.011536838490507267,
+        "MTD vs Budget": -0.06459898685377058,
         "_fav_MTD vs Budget": false,
-        "YTD": 0.14688285155822323,
-        "YTD vs LY": -0.0003050591429035743,
+        "YTD": 0.12107516342923556,
+        "YTD vs LY": -0.029982174554382943,
         "_fav_YTD vs LY": false,
-        "YTD vs Budget": -0.00539588441892816,
+        "YTD vs Budget": -0.054603463501203056,
         "_fav_YTD vs Budget": false
       }
     ],
@@ -405,26 +405,7 @@
         "fav": {
           "MTD vs LY": false,
           "MTD vs Budget": false,
-          "YTD vs LY": true,
-          "YTD vs Budget": false
-        }
-      },
-      {
-        "kind": "line",
-        "level": 0,
-        "fmt": null,
-        "col_fmt": {
-          "MTD": "eur",
-          "YTD": "eur",
-          "MTD vs LY": "pct",
-          "MTD vs Budget": "pct",
-          "YTD vs LY": "pct",
-          "YTD vs Budget": "pct"
-        },
-        "fav": {
-          "MTD vs LY": true,
-          "MTD vs Budget": false,
-          "YTD vs LY": true,
+          "YTD vs LY": false,
           "YTD vs Budget": false
         }
       },
@@ -442,6 +423,25 @@
         },
         "fav": {
           "MTD vs LY": false,
+          "MTD vs Budget": false,
+          "YTD vs LY": false,
+          "YTD vs Budget": false
+        }
+      },
+      {
+        "kind": "line",
+        "level": 0,
+        "fmt": null,
+        "col_fmt": {
+          "MTD": "eur",
+          "YTD": "eur",
+          "MTD vs LY": "pct",
+          "MTD vs Budget": "pct",
+          "YTD vs LY": "pct",
+          "YTD vs Budget": "pct"
+        },
+        "fav": {
+          "MTD vs LY": true,
           "MTD vs Budget": true,
           "YTD vs LY": false,
           "YTD vs Budget": true
@@ -498,9 +498,9 @@
           "YTD vs Budget": "pct"
         },
         "fav": {
-          "MTD vs LY": true,
+          "MTD vs LY": false,
           "MTD vs Budget": false,
-          "YTD vs LY": true,
+          "YTD vs LY": false,
           "YTD vs Budget": false
         }
       },
@@ -539,25 +539,6 @@
           "MTD vs LY": false,
           "MTD vs Budget": false,
           "YTD vs LY": false,
-          "YTD vs Budget": true
-        }
-      },
-      {
-        "kind": "line",
-        "level": 0,
-        "fmt": null,
-        "col_fmt": {
-          "MTD": "pct",
-          "YTD": "pct",
-          "MTD vs LY": "pp",
-          "MTD vs Budget": "pp",
-          "YTD vs LY": "pp",
-          "YTD vs Budget": "pp"
-        },
-        "fav": {
-          "MTD vs LY": false,
-          "MTD vs Budget": false,
-          "YTD vs LY": true,
           "YTD vs Budget": false
         }
       },
@@ -576,7 +557,26 @@
         "fav": {
           "MTD vs LY": false,
           "MTD vs Budget": false,
-          "YTD vs LY": true,
+          "YTD vs LY": false,
+          "YTD vs Budget": false
+        }
+      },
+      {
+        "kind": "line",
+        "level": 0,
+        "fmt": null,
+        "col_fmt": {
+          "MTD": "pct",
+          "YTD": "pct",
+          "MTD vs LY": "pp",
+          "MTD vs Budget": "pp",
+          "YTD vs LY": "pp",
+          "YTD vs Budget": "pp"
+        },
+        "fav": {
+          "MTD vs LY": false,
+          "MTD vs Budget": false,
+          "YTD vs LY": false,
           "YTD vs Budget": false
         }
       },
@@ -617,82 +617,82 @@
       {
         "month_key": 202601,
         "Month": "Jan 2026",
-        "Actual": 0.6058978893908749,
-        "Actual R12M": 0.6265510657418366,
-        "PY": 0.5979788104890222,
-        "Budget": 0.6014837022749955
+        "Actual": 0.61089624502384,
+        "Actual R12M": 0.6294478025830382,
+        "PY": 0.6281305859006944,
+        "Budget": 0.6206923016858943
       },
       {
         "month_key": 202602,
         "Month": "Feb 2026",
-        "Actual": 0.6249419805042912,
-        "Actual R12M": 0.6268643627104263,
-        "PY": 0.6209039443422093,
-        "Budget": 0.6208688364427376
+        "Actual": 0.613268721520044,
+        "Actual R12M": 0.6291214140222287,
+        "PY": 0.6168626954878937,
+        "Budget": 0.6339762839577506
       },
       {
         "month_key": 202603,
         "Month": "Mar 2026",
-        "Actual": 0.642706175635062,
-        "Actual R12M": 0.6267023466172491,
-        "PY": 0.6452058136596088,
-        "Budget": 0.6602030331334576
+        "Actual": 0.6084817938192074,
+        "Actual R12M": 0.6260449562984765,
+        "PY": 0.6437170739294873,
+        "Budget": 0.687015804065428
       },
       {
         "month_key": 202604,
         "Month": "Apr 2026",
-        "Actual": 0.6339400311232284,
-        "Actual R12M": 0.6271616803198624,
-        "PY": 0.6287317595636127,
-        "Budget": 0.6315786411073268
+        "Actual": 0.5950817068369254,
+        "Actual R12M": 0.6253648938524504,
+        "PY": 0.6030744448192912,
+        "Budget": 0.6369543914219638
       },
       {
         "month_key": 202605,
         "Month": "May 2026",
-        "Actual": 0.6394069178853758,
-        "Actual R12M": 0.6268497642758902,
-        "PY": 0.6435729354578633,
-        "Budget": 0.6383719165989098
+        "Actual": 0.5902541997555576,
+        "Actual R12M": 0.6208002048778907,
+        "PY": 0.6477319308987496,
+        "Budget": 0.624598255196951
       },
       {
         "month_key": 202606,
         "Month": "Jun 2026",
-        "Actual": 0.6403513083613304,
-        "Actual R12M": 0.6271797523604252,
-        "PY": 0.6371108562275493,
-        "Budget": 0.6449064004969582
+        "Actual": 0.6657527017419075,
+        "Actual R12M": 0.6204132783497104,
+        "PY": 0.6687157437541705,
+        "Budget": 0.6706991411016039
       },
       {
         "month_key": 202607,
         "Month": "Jul 2026",
-        "Actual": 0.6242313056217554,
-        "Actual R12M": 0.6269191821660403,
-        "PY": 0.6273468121788036,
-        "Budget": 0.6245108908796678
+        "Actual": 0.588423364014879,
+        "Actual R12M": 0.6189624908344251,
+        "PY": 0.6086016942085867,
+        "Budget": 0.6280032572757798
       },
       {
         "month_key": 202608,
         "Month": "Aug 2026",
-        "Actual": 0.5414055646120313,
-        "Actual R12M": 0.6265578942151053,
-        "PY": 0.5434914889505177,
-        "Budget": 0.5397420542129341
+        "Actual": 0.5492524406656422,
+        "Actual R12M": 0.6195769040772422,
+        "PY": 0.5390907932069244,
+        "Budget": 0.5515811052532074
       },
       {
         "month_key": 202609,
         "Month": "Sep 2026",
-        "Actual": 0.6415036291924368,
-        "Actual R12M": 0.6266227741153284,
-        "PY": 0.6414916219714892,
-        "Budget": 0.6449064016056756
+        "Actual": 0.6815698445588889,
+        "Actual R12M": 0.622542409549625,
+        "PY": 0.654050202187991,
+        "Budget": 0.6691752281247463
       },
       {
         "month_key": 202610,
         "Month": "Oct 2026",
-        "Actual": 0.6495329374134475,
-        "Actual R12M": 0.6261645381863303,
-        "PY": 0.6553233055059473,
-        "Budget": 0.6542543427833615
+        "Actual": 0.6141131990046498,
+        "Actual R12M": 0.619919007514482,
+        "PY": 0.6443746424872263,
+        "Budget": 0.6432288593563535
       }
     ],
     "meta": {
@@ -713,8 +713,8 @@
       ]
     },
     "currency": "USD",
-    "fx_rate": "B26 (constant budget rate)",
-    "as_of_date": "2026-11-12",
+    "fx_rate": "constant budget rate",
+    "as_of_date": "2026-11-16",
     "user": "group_cfo",
     "rls": "SQL Server SECURITY POLICY (SESSION_CONTEXT)",
     "period": "MTD Oct 2026 and YTD Oct 2026",
@@ -723,6 +723,11 @@
       "Actual",
       "PY (LY)",
       "Budget"
+    ],
+    "applied": [
+      "Scope: Canada (from your question)",
+      "Period: MTD Oct 2026 and YTD Oct 2026 (default)",
+      "Versions: Actual, PY, Budget (default)"
     ]
   },
   "sql_used": [
@@ -777,6 +782,9 @@
             "<empty>"
           ],
           "checked": 0,
+          "problems": [
+            "the answer was empty"
+          ],
           "draft": ""
         }
       ],
@@ -786,16 +794,18 @@
     },
     "llm_calls": [],
     "errors": [],
+    "options_mode": null,
+    "negated": [],
     "model": "rules",
     "timings": {
-      "preprocess": 0.01,
+      "preprocess": 0.006,
       "plan": 0.0,
-      "act": 0.532,
+      "act": 0.471,
       "write#1": 0.0
     },
     "resolved": {
       "org": "Canada",
-      "metric_or_ratio": "(not specified)",
+      "metric_or_ratio": "maop_margin_revenue",
       "period": "(default: YTD)",
       "versions": [],
       "comparisons": [],
@@ -807,17 +817,17 @@
     "options": [],
     "facts": [
       "KPI cockpit for Canada: MTD = Oct 2026, YTD = Jan-Oct 2026; Actual vs LY (prior year) and vs Budget; USD at budget rate.",
-      "Direct margin: MTD 65.0% (0.6 pp below LY, unfavourable; 0.5 pp below Budget, unfavourable); YTD 62.7% (0.0 pp above LY, favourable; 0.2 pp below Budget, unfavourable).",
-      "Production: MTD USD 19.4M (2.7% above LY, favourable; 2.1% below Budget, unfavourable); YTD USD 178.3M (4.7% above LY, favourable; 2.8% below Budget, unfavourable).",
-      "Direct labor cost (7A): MTD USD 6.8M (4.4% higher than LY, unfavourable; 0.7% lower than Budget, favourable); YTD USD 66.5M (4.7% higher than LY, unfavourable; 2.3% lower than Budget, favourable).",
-      "Utilization rate (billable / available hours): MTD 81.7% (1.3 pp below LY, unfavourable; 1.2 pp below Budget, unfavourable); YTD 82.6% (0.2 pp below LY, unfavourable; 0.3 pp below Budget, unfavourable).",
-      "Production per billable hour: MTD USD 189.7 (2.4% above LY, favourable; 0.4% below Budget, unfavourable); YTD USD 180.2 (3.0% above LY, favourable; 1.4% below Budget, unfavourable).",
-      "Production per FTE (annualised): MTD USD 217k (1.0% above LY, favourable; 1.6% below Budget, unfavourable); YTD USD 201k (2.9% above LY, favourable; 1.6% below Budget, unfavourable).",
-      "Overtime ratio (overtime / available hours): MTD 11.7% (0.5 pp below LY, favourable; 0.5 pp below Budget, favourable); YTD 10.0% (0.1 pp below LY, favourable; 0.2 pp below Budget, favourable).",
-      "Production hourly cost (direct labor per billable hour): MTD USD 66.5 (4.1% higher than LY, unfavourable; 1.0% higher than Budget, unfavourable); YTD USD 67.3 (3.0% higher than LY, unfavourable; 0.8% lower than Budget, favourable).",
-      "Direct labor cost / Production: MTD 35.0% (0.6 pp above LY, unfavourable; 0.5 pp above Budget, unfavourable); YTD 37.3% (0.0 pp below LY, favourable; 0.2 pp above Budget, unfavourable).",
-      "Gross margin: MTD 28.6% (0.8 pp below LY, unfavourable; 1.0 pp below Budget, unfavourable); YTD 25.2% (0.0 pp above LY, favourable; 0.4 pp below Budget, unfavourable).",
-      "MAOP margin (on revenue): MTD 18.8% (1.0 pp below LY, unfavourable; 1.2 pp below Budget, unfavourable); YTD 14.7% (0.0 pp below LY, unfavourable; 0.5 pp below Budget, unfavourable)."
+      "Direct margin: MTD 61.4% (3.0 pp below LY, unfavourable; 2.9 pp below Budget, unfavourable); YTD 61.5% (1.3 pp below LY, unfavourable; 2.5 pp below Budget, unfavourable).",
+      "Production: MTD USD 17.6M (8.7% below LY, unfavourable; 13.2% below Budget, unfavourable); YTD USD 177.8M (2.3% below LY, unfavourable; 11.3% below Budget, unfavourable).",
+      "Direct staff costs: MTD USD 6.8M (0.9% lower than LY, favourable; 6.1% lower than Budget, favourable); YTD USD 68.4M (1.2% higher than LY, unfavourable; 5.2% lower than Budget, favourable).",
+      "Utilization rate (billable / available hours): MTD 73.7% (4.5 pp below LY, unfavourable; 2.5 pp below Budget, unfavourable); YTD 73.3% (2.7 pp below LY, unfavourable; 2.9 pp below Budget, unfavourable).",
+      "Production per billable hour: MTD USD 190.9 (0.3% above LY, favourable; 4.5% below Budget, unfavourable); YTD USD 198.1 (2.8% above LY, favourable; 3.3% below Budget, unfavourable).",
+      "Production per FTE (annualised): MTD USD 199k (5.2% below LY, unfavourable; 7.6% below Budget, unfavourable); YTD USD 198k (0.7% below LY, unfavourable; 7.0% below Budget, unfavourable).",
+      "Overtime ratio (overtime / available hours): MTD 7.0% (1.3 pp below LY, favourable; 0.9 pp below Budget, favourable); YTD 6.0% (0.6 pp below LY, favourable; 0.7 pp below Budget, favourable).",
+      "Production hourly cost (direct staff cost per billable hour): MTD USD 73.7 (8.8% higher than LY, unfavourable; 3.3% higher than Budget, unfavourable); YTD USD 76.2 (6.5% higher than LY, unfavourable; 3.4% higher than Budget, unfavourable).",
+      "Direct staff costs / Production: MTD 38.6% (3.0 pp above LY, unfavourable; 2.9 pp above Budget, unfavourable); YTD 38.5% (1.3 pp above LY, unfavourable; 2.5 pp above Budget, unfavourable).",
+      "Gross margin: MTD 22.8% (4.7 pp below LY, unfavourable; 5.0 pp below Budget, unfavourable); YTD 23.1% (2.2 pp below LY, unfavourable; 4.3 pp below Budget, unfavourable).",
+      "Operating margin on revenue: MTD 11.6% (6.2 pp below LY, unfavourable; 6.5 pp below Budget, unfavourable); YTD 12.1% (3.0 pp below LY, unfavourable; 5.5 pp below Budget, unfavourable)."
     ],
     "evidence": {
       "extra": {
@@ -825,87 +835,87 @@
           {
             "month_key": 202601,
             "Month": "Jan 2026",
-            "Actual": 0.6058978893908749,
-            "Actual R12M": 0.6265510657418366,
-            "PY": 0.5979788104890222,
-            "Budget": 0.6014837022749955
+            "Actual": 0.61089624502384,
+            "Actual R12M": 0.6294478025830382,
+            "PY": 0.6281305859006944,
+            "Budget": 0.6206923016858943
           },
           {
             "month_key": 202602,
             "Month": "Feb 2026",
-            "Actual": 0.6249419805042912,
-            "Actual R12M": 0.6268643627104263,
-            "PY": 0.6209039443422093,
-            "Budget": 0.6208688364427376
+            "Actual": 0.613268721520044,
+            "Actual R12M": 0.6291214140222287,
+            "PY": 0.6168626954878937,
+            "Budget": 0.6339762839577506
           },
           {
             "month_key": 202603,
             "Month": "Mar 2026",
-            "Actual": 0.642706175635062,
-            "Actual R12M": 0.6267023466172491,
-            "PY": 0.6452058136596088,
-            "Budget": 0.6602030331334576
+            "Actual": 0.6084817938192074,
+            "Actual R12M": 0.6260449562984765,
+            "PY": 0.6437170739294873,
+            "Budget": 0.687015804065428
           },
           {
             "month_key": 202604,
             "Month": "Apr 2026",
-            "Actual": 0.6339400311232284,
-            "Actual R12M": 0.6271616803198624,
-            "PY": 0.6287317595636127,
-            "Budget": 0.6315786411073268
+            "Actual": 0.5950817068369254,
+            "Actual R12M": 0.6253648938524504,
+            "PY": 0.6030744448192912,
+            "Budget": 0.6369543914219638
           },
           {
             "month_key": 202605,
             "Month": "May 2026",
-            "Actual": 0.6394069178853758,
-            "Actual R12M": 0.6268497642758902,
-            "PY": 0.6435729354578633,
-            "Budget": 0.6383719165989098
+            "Actual": 0.5902541997555576,
+            "Actual R12M": 0.6208002048778907,
+            "PY": 0.6477319308987496,
+            "Budget": 0.624598255196951
           },
           {
             "month_key": 202606,
             "Month": "Jun 2026",
-            "Actual": 0.6403513083613304,
-            "Actual R12M": 0.6271797523604252,
-            "PY": 0.6371108562275493,
-            "Budget": 0.6449064004969582
+            "Actual": 0.6657527017419075,
+            "Actual R12M": 0.6204132783497104,
+            "PY": 0.6687157437541705,
+            "Budget": 0.6706991411016039
           },
           {
             "month_key": 202607,
             "Month": "Jul 2026",
-            "Actual": 0.6242313056217554,
-            "Actual R12M": 0.6269191821660403,
-            "PY": 0.6273468121788036,
-            "Budget": 0.6245108908796678
+            "Actual": 0.588423364014879,
+            "Actual R12M": 0.6189624908344251,
+            "PY": 0.6086016942085867,
+            "Budget": 0.6280032572757798
           },
           {
             "month_key": 202608,
             "Month": "Aug 2026",
-            "Actual": 0.5414055646120313,
-            "Actual R12M": 0.6265578942151053,
-            "PY": 0.5434914889505177,
-            "Budget": 0.5397420542129341
+            "Actual": 0.5492524406656422,
+            "Actual R12M": 0.6195769040772422,
+            "PY": 0.5390907932069244,
+            "Budget": 0.5515811052532074
           },
           {
             "month_key": 202609,
             "Month": "Sep 2026",
-            "Actual": 0.6415036291924368,
-            "Actual R12M": 0.6266227741153284,
-            "PY": 0.6414916219714892,
-            "Budget": 0.6449064016056756
+            "Actual": 0.6815698445588889,
+            "Actual R12M": 0.622542409549625,
+            "PY": 0.654050202187991,
+            "Budget": 0.6691752281247463
           },
           {
             "month_key": 202610,
             "Month": "Oct 2026",
-            "Actual": 0.6495329374134475,
-            "Actual R12M": 0.6261645381863303,
-            "PY": 0.6553233055059473,
-            "Budget": 0.6542543427833615
+            "Actual": 0.6141131990046498,
+            "Actual R12M": 0.619919007514482,
+            "PY": 0.6443746424872263,
+            "Budget": 0.6432288593563535
           }
         ]
       },
       "totals": {}
     },
-    "latency_s": 0.55
+    "latency_s": 0.48
   }
 }

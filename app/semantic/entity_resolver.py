@@ -114,6 +114,23 @@ INTENT_PATTERNS = {
                  r"|\b(staff|employee|people|personnel)\s+turnover\b|\bturnover rate\b"
                  r"|\b(employees|people|staff|headcount)\s+(have\s+|has\s+)?left\b|\bhow many (employees|people)\b"
                  r"|\bdirect\s+(vs\.?|versus|and)\s+indirect\s+(staff|employees|people|headcount)\b(?!\s+costs?)",
+    # current-month landing: expected month-end of the open month (and YTD / full year including it)
+    "landing": r"\b(landings?|lands?|landed|expected month[- ]end|month[- ]end (estimate|outlook|projection|forecast)|"
+               r"nowcast|full[- ]year outlook|fy outlook|year[- ]end outlook)\b"
+               r"|\bwhere will\b.*\bland\b|\b(expected|projected|likely|set|on track|going) to (miss|beat|hit|make|exceed|"
+               r"land|fall short of|come in)\b|\bwill\b.{0,40}\b(miss|beat|hit|make|exceed)\b.{0,12}\bbudget\b",
+    # discovery: what IRIS covers (answered from the data catalog, never with SQL)
+    "catalog": r"\b(what|which) (regions|countries|businesses|business units|bus|product lines|metrics|measures|kpis|"
+               r"ratios|versions|periods|accounts|p&l lines|billing patterns)\b.{0,40}\b(in scope|can i|could i|are there|"
+               r"do you|are available|available|covered|exist|supported|do we have|are included|included)\b"
+               r"|\b(list|show|name)( me)?( all| the)? (regions|countries|businesses|business units|bus|product lines|"
+               r"metrics|measures|kpis|ratios|versions|accounts|p&l lines|billing patterns)\b(?!\s+(by|with|for|in)\b)"
+               r"|\bwhat (can|do) you (do|know|cover|support|offer)\b|\bwhat data\b|\bwhich data\b|\bdata catalog\b"
+               r"|\bwhat can i ask\b|\bexample questions\b|\bcapabilities\b|\bhow do i use\b|^\s*help\s*[?!.]*\s*$"
+               r"|\bwhat (ratios|metrics) do you\b|\bin scope\b"
+               r"|\b(what|which) (regions|countries|businesses|business units|bus|product lines)\s+(are|exist|sit|belong)"
+               r"\s+(in|within|under|to)\b(?!.*\b(red|black|loss|losses|profit|budget|margin|revenue|billing|growth|"
+               r"decline|drop|deficit|target|plan)\b)",
 }
 LEVEL_PATTERNS = [
     ("l6_bu", r"\b(by|per|each|across|which|all|top|bottom|worst|best)\s+(\d+\s+)?(bus|bu|business units?)\b|\bbus\b|\bbu by bu\b"),
@@ -179,6 +196,7 @@ class Resolution:
     intents: list[str] = field(default_factory=list)
     negated: list[str] = field(default_factory=list)     # phrases corrected away ("not YTD" -> ["YTD"])
     clean_text: str = ""                                 # the question without those phrases
+    both_margins: bool = False                           # "profit %" / "margin" without a base: show both
 
     @property
     def metric(self) -> str | None:
@@ -296,6 +314,10 @@ def _metric_index() -> dict[str, list[dict]]:
         add(r.name, "ratio", r.id)
         for s in r.synonyms:
             add(s, "ratio", r.id)
+    for p in reg.pairs.values():
+        add(p.name, "pair", p.id)
+        for s in p.synonyms:
+            add(s, "pair", p.id)
     return idx
 
 
@@ -514,12 +536,16 @@ def resolve(text: str, org_df: pd.DataFrame, as_of: date | None = None) -> Resol
     mids: list[tuple[int, str, str]] = []
     for h in metric_hits:
         targets = h.payload["targets"]
-        t = sorted(targets, key=lambda x: 0 if x["kind"] == "ratio" else 1)[0]
+        t = sorted(targets, key=lambda x: 0 if x["kind"] in ("ratio", "pair") else 1)[0]
         mids.append((h.start, t["kind"], t["id"]))
     ratio_ids = [mid for _, kind, mid in mids if kind == "ratio"]
+    pair_ids = [mid for _, kind, mid in mids if kind == "pair"]
     metric_ids = [mid for _, kind, mid in mids if kind == "metric"]
     if ratio_ids:
         res.ratio = ratio_ids[0]
+    elif pair_ids:
+        res.ratio = registry().pairs[pair_ids[0]].members[0]
+        res.both_margins = True
     elif len(metric_ids) >= 2:
         # compose "A as % of B" / "A / B" / "A to B ratio" / "A per FTE"
         first, second = [m for m in mids if m[1] == "metric"][:2]
@@ -532,6 +558,13 @@ def resolve(text: str, org_df: pd.DataFrame, as_of: date | None = None) -> Resol
         res.ratio = rid or f"ratio:{metric_ids[0]}/fte"
     parts = registry().ratio_parts(res.ratio) if res.ratio else set()
     res.metrics = [m for m in metric_ids if m not in parts]
+    if "landing" in res.intents and res.period and res.period["type"] == "MONTH" and \
+            not re.search(r"\b20\d\d\b|'\d\d\b", low):
+        # in a landing question a month without a year means this year's month: the open month is the
+        # landing month, earlier months are closed, later months are in the future
+        open_key = ti.add_months(ti.last_closed_month(as_of), 1)
+        key = open_key if re.search(r"\b(this|current)\s+month\b", low) else ti.mk(open_key // 100, res.period["end"] % 100)
+        res.period = ti.Period("MONTH", key).to_dict()
     return res
 
 

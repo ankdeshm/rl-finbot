@@ -72,6 +72,21 @@ def add_lines(w: pd.DataFrame, leaf_codes: list[str], line_of: dict, group_of: d
     return w
 
 
+NA_DENOMINATOR_NOTE = "n/a = the denominator is zero or negative, so the ratio is not meaningful."
+
+
+def safe_ratio(num, den):
+    """num / den, NaN (shown as n/a) where the denominator is zero or negative; never divides by zero."""
+    if isinstance(den, pd.Series):
+        ok = den > 0
+        return (num / den.where(ok, np.nan)).where(ok, np.nan)
+    try:
+        d = float(den)
+    except (TypeError, ValueError):
+        return np.nan
+    return float(num) / d if np.isfinite(d) and d > 0 else np.nan
+
+
 class SemanticLayer:
     def __init__(self, user_id: str, as_of: date | None = None):
         self.user_id = user_id
@@ -109,10 +124,39 @@ class SemanticLayer:
             return stmt.where(col.between(ms[0], ms[-1]))
         return stmt.where(col.in_(ms))
 
+    def landing_snapshot(self):
+        """Latest landing run for the open month at this as-of date (None if `make landing` has not run)."""
+        if not hasattr(self, "_landing_snap"):
+            from app.landing.query import latest_snapshot  # noqa: WPS433 (avoids a circular import)
+            self._landing_snap = latest_snapshot(self.engine, self.as_of)
+        return self._landing_snap
+
+    def _fetch_landing_leaf(self, months, org_filter, group_cols=()) -> pd.DataFrame:
+        from app.db import fact_landing_leaf  # noqa: WPS433
+
+        gc = list(group_cols)
+        snap = self.landing_snapshot()
+        if snap is None or snap.month_key not in set(months):
+            return pd.DataFrame(columns=gc + ["account_id", "amount"])
+        f, o = fact_landing_leaf, dim_org
+        gcols = [o.c[g] for g in gc if g in ORG_LEVELS] + ([f.c.month_key] if "month_key" in gc else [])
+        stmt = (select(*gcols, f.c.account_id, func.sum(f.c.amount_usd).label("amount"))
+                .select_from(f.join(o, f.c.bu_id == o.c.bu_id))
+                .where(f.c.snapshot_date == snap.snapshot_date).where(f.c.month_key == snap.month_key))
+        stmt = self._where_org(stmt, org_filter, f.c.bu_id)
+        stmt = stmt.group_by(*gcols, f.c.account_id)
+        self.sql_log.append(self._compile(stmt))
+        with self.engine.connect() as conn:
+            df = pd.read_sql(stmt, conn)
+        df["amount"] = df["amount"].astype(float)
+        return df
+
     def fetch_leaf(self, version: str, months, org_filter, group_cols=()) -> pd.DataFrame:
         gc = list(group_cols)
         if not months:
             return pd.DataFrame(columns=gc + ["account_id", "amount"])
+        if version == "LANDING":                       # virtual version: stored landing P50 (open month)
+            return self._fetch_landing_leaf(months, org_filter, gc)
         f, o, v = fact_pnl, dim_org, dim_version
         gcols = [o.c[g] for g in gc if g in ORG_LEVELS] + ([f.c.month_key] if "month_key" in gc else [])
         stmt = (select(*gcols, f.c.account_id, func.sum(f.c.amount_usd).label("amount"))
@@ -214,9 +258,7 @@ class SemanticLayer:
         if kind == "metric":
             return self.metric_value(w, obj)
         num, den = self.ratio_parts(w, obj)
-        if isinstance(den, pd.Series):
-            return num / den.replace(0, np.nan)
-        return num / den if den else np.nan
+        return safe_ratio(num, den)
 
     @staticmethod
     def fmt_of(kind: str, obj) -> str:
@@ -278,7 +320,8 @@ class SemanticLayer:
                 row[f"Var % vs {lab}"] = pct
                 row[f"_fav_{lab}"] = ti.is_favorable(diff, "up")   # signed values: up = better
             out.append(row)
-        for rid in ("maop_margin_revenue", "gross_margin", "direct_margin", "personnel_to_production"):
+        for rid in ("maop_margin_revenue", "maop_margin_production", "gross_margin", "direct_margin",
+                    "personnel_to_production"):
             r = self.reg.ratios[rid]
             row = {"Line": f"{r.name}", "_code": rid, "_kind": "ratio", "_level": 0, "_fmt": "pct"}
             for lab in labels:
@@ -418,7 +461,9 @@ class SemanticLayer:
                            "Period": [s.period.label() for s in series if s.label in set(w["series"])],
                            num_m.name: self.metric_value(w, num_m).values,
                            den_label: self.metric_value(w, den_m).values,
-                           obj.name: (num / den.replace(0, np.nan)).values})
+                           obj.name: safe_ratio(num, den).values})
+        if df[obj.name].isna().any():
+            notes = notes + [NA_DENOMINATOR_NOTE]
         base = df[obj.name].iloc[0]
         df["Actual vs version"] = base - df[obj.name]
         df.loc[0, "Actual vs version"] = np.nan
@@ -591,7 +636,7 @@ class SemanticLayer:
                     row[f"{lab} vs {ref}"] = diff
                     row[f"_fav_{lab}"] = ti.is_favorable(diff, "up")
             rows.append(row)
-        for rid in ("maop_margin_revenue", "gross_margin", "direct_margin"):
+        for rid in ("maop_margin_revenue", "maop_margin_production", "gross_margin", "direct_margin"):
             r = self.reg.ratios[rid]
             row = {"Line": r.name, "_code": r.id, "_kind": "ratio", "_fmt": "pct"}
             for lab in labels:

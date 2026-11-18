@@ -11,4 +11,3 @@ data/*
 .app-ready
 scratch/
 .DS_Store
-hf_space/

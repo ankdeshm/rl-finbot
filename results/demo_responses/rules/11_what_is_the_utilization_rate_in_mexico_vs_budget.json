@@ -1,22 +1,22 @@
 {
-  "answer_markdown": "**Utilization rate (billable / available hours) for Mexico, YTD Oct 2026 (Actual): 82.0%.**\n\n- Components (Actual): Billable hours 1,830,727.4; Available hours 2,233,043.5\n- Actual is 0.7 pp below Budget (YTD Oct 2026) (82.7%), unfavourable",
+  "answer_markdown": "**Utilization rate (billable / available hours) for Mexico, YTD Oct 2026 (Actual): 74.7%.**\n\n- Components (Actual): Billable hours 1,449,116.8; Available hours 1,940,360.6\n- Actual is 0.9 pp below Budget (YTD Oct 2026) (75.6%), unfavourable",
   "table": [
     {
       "Version": "Actual",
       "Period": "YTD Oct 2026",
-      "Billable hours": 1830727.4,
-      "Available hours": 2233043.5,
-      "Utilization rate (billable / available hours)": 0.8198350815826023,
+      "Billable hours": 1449116.8,
+      "Available hours": 1940360.6,
+      "Utilization rate (billable / available hours)": 0.7468286049510591,
       "Actual vs version": null,
       "_fav": null
     },
     {
       "Version": "Budget",
       "Period": "YTD Oct 2026",
-      "Billable hours": 1857610.6,
-      "Available hours": 2247542.0,
-      "Utilization rate (billable / available hours)": 0.8265076247740866,
-      "Actual vs version": -0.006672543191484248,
+      "Billable hours": 1472989.0,
+      "Available hours": 1948966.1,
+      "Utilization rate (billable / available hours)": 0.7557796926277989,
+      "Actual vs version": -0.0089510876767398,
       "_fav": false
     }
   ],
@@ -33,19 +33,19 @@
       {
         "Version": "Actual",
         "Period": "YTD Oct 2026",
-        "Billable hours": 1830727.4,
-        "Available hours": 2233043.5,
-        "Utilization rate (billable / available hours)": 0.8198350815826023,
+        "Billable hours": 1449116.8,
+        "Available hours": 1940360.6,
+        "Utilization rate (billable / available hours)": 0.7468286049510591,
         "Actual vs version": null,
         "_fav": null
       },
       {
         "Version": "Budget",
         "Period": "YTD Oct 2026",
-        "Billable hours": 1857610.6,
-        "Available hours": 2247542.0,
-        "Utilization rate (billable / available hours)": 0.8265076247740866,
-        "Actual vs version": -0.006672543191484248,
+        "Billable hours": 1472989.0,
+        "Available hours": 1948966.1,
+        "Utilization rate (billable / available hours)": 0.7557796926277989,
+        "Actual vs version": -0.0089510876767398,
         "_fav": false
       }
     ],
@@ -87,11 +87,11 @@
     "data": [
       {
         "label": "Actual (YTD Oct 2026)",
-        "value": 0.8198350815826023
+        "value": 0.7468286049510591
       },
       {
         "label": "Budget (YTD Oct 2026)",
-        "value": 0.8265076247740866
+        "value": 0.7557796926277989
       }
     ],
     "meta": {}
@@ -104,8 +104,8 @@
       ]
     },
     "currency": "USD",
-    "fx_rate": "B26 (constant budget rate)",
-    "as_of_date": "2026-11-12",
+    "fx_rate": "constant budget rate",
+    "as_of_date": "2026-11-16",
     "user": "group_cfo",
     "rls": "SQL Server SECURITY POLICY (SESSION_CONTEXT)",
     "period": "YTD Oct 2026",
@@ -113,6 +113,11 @@
     "versions": [
       "Actual (Actual, YTD Oct 2026)",
       "Budget (Budget, YTD Oct 2026)"
+    ],
+    "applied": [
+      "Scope: Mexico (from your question)",
+      "Period: YTD Oct 2026 (default)",
+      "Versions: Actual, Budget (from your question)"
     ]
   },
   "sql_used": [
@@ -160,6 +165,9 @@
             "<empty>"
           ],
           "checked": 0,
+          "problems": [
+            "the answer was empty"
+          ],
           "draft": ""
         }
       ],
@@ -169,11 +177,13 @@
     },
     "llm_calls": [],
     "errors": [],
+    "options_mode": null,
+    "negated": [],
     "model": "rules",
     "timings": {
-      "preprocess": 0.009,
+      "preprocess": 0.008,
       "plan": 0.0,
-      "act": 0.161,
+      "act": 0.147,
       "write#1": 0.0
     },
     "resolved": {
@@ -189,14 +199,14 @@
     "followup": false,
     "options": [],
     "facts": [
-      "Utilization rate (billable / available hours) for Mexico, YTD Oct 2026 (Actual): 82.0%.",
-      "Components (Actual): Billable hours 1,830,727.4; Available hours 2,233,043.5.",
-      "Actual is 0.7 pp below Budget (YTD Oct 2026) (82.7%), unfavourable."
+      "Utilization rate (billable / available hours) for Mexico, YTD Oct 2026 (Actual): 74.7%.",
+      "Components (Actual): Billable hours 1,449,116.8; Available hours 1,940,360.6.",
+      "Actual is 0.9 pp below Budget (YTD Oct 2026) (75.6%), unfavourable."
     ],
     "evidence": {
       "extra": {},
       "totals": {}
     },
-    "latency_s": 0.18
+    "latency_s": 0.16
   }
 }

@@ -11,7 +11,10 @@ import plotly.graph_objects as go
 from app.viz import format as F
 
 COLORS = {"Actual": "#0B3D91", "PY": "#A6ACAF", "Budget": "#E67E22", "FC1": "#85C1E9",
-          "FC2": "#2E86C1", "FC3": "#1B4F72", "Actual R12M": "#17A589", "Hires": "#17A589", "Leavers": "#C0392B"}
+          "FC2": "#2E86C1", "FC3": "#1B4F72", "Actual R12M": "#17A589", "Hires": "#17A589", "Leavers": "#C0392B",
+          "Landing": "#0F766E", "Landing P50": "#0F766E", "Operating margin on revenue": "#0B3D91",
+          "Operating margin on production": "#17A589"}
+LANDING, LANDING_LIGHT = "#0F766E", "#CCEDE8"
 FAV, UNFAV, NEUTRAL, TOTAL = "#1E8449", "#C0392B", "#7F8C8D", "#0B3D91"
 SERIES_PALETTE = ["#0B3D91", "#2E86C1", "#85C1E9", "#E67E22", "#F5B041", "#17A589", "#76D7C4",
                   "#7D3C98", "#BB8FCE", "#A6ACAF"]
@@ -33,6 +36,8 @@ def chart_spec(out: dict, intents: list[str] | None = None) -> dict:
     if not out or not out.get("ok", True):
         return _none()
     kind, data, meta, f = out.get("kind"), out.get("data") or [], out.get("meta") or {}, out.get("filters_used") or {}
+    if meta.get("chart_spec"):
+        return meta["chart_spec"]
     period, org = f.get("period", ""), f.get("org", "")
     if kind == "trend":
         return {"type": "line", "title": f"{meta.get('name')} - {org} ({period})", "fmt": meta.get("fmt", "eur"),
@@ -288,11 +293,63 @@ def figure(spec: dict, units: str = "M") -> go.Figure | None:
                                                                  "dash": "dash" if s == "Budget" else "dot"}))
     elif t == "grouped_bar":
         series = spec.get("y", [])
-        for s in series:
+        for i, s in enumerate(series):
             rows = [r for r in data if r["series"] == s]
             fig.add_trace(go.Bar(x=[r["category"] for r in rows], y=[sv(r["value"]) for r in rows], name=s,
-                                 marker_color=COLORS.get(s)))
+                                 marker_color=COLORS.get(s, SERIES_PALETTE[i % len(SERIES_PALETTE)])))
         fig.update_layout(barmode="group")
+    elif t == "landing_trend":
+        x = [r["Month"] for r in data]
+        act = [sv(r.get("Actual")) for r in data]
+        fig.add_trace(go.Scatter(x=x, y=act, mode="lines+markers", name="Actual",
+                                 line={"color": COLORS["Actual"], "width": 3}, connectgaps=False))
+        for s, dash in (("PY", "dot"), ("Budget", "dash")):
+            fig.add_trace(go.Scatter(x=x, y=[sv(r.get(s)) for r in data], mode="lines", name=s,
+                                     line={"color": COLORS[s], "width": 2, "dash": dash}))
+        land = [r for r in data if r.get("Landing") is not None]
+        if land:
+            r = land[0]
+            p50, lo, hi = r["Landing"], r.get("P10"), r.get("P90")
+            err = {"type": "data", "symmetric": False, "array": [sv(hi - p50) if hi is not None else 0],
+                   "arrayminus": [sv(p50 - lo) if lo is not None else 0], "color": LANDING, "thickness": 2, "width": 8}
+            fig.add_trace(go.Scatter(x=[r["Month"]], y=[sv(p50)], mode="markers+text", name="Landing (P50, P10-P90)",
+                                     marker={"symbol": "diamond", "size": 14, "color": LANDING,
+                                             "line": {"color": "#FFFFFF", "width": 1}},
+                                     error_y=err, text=[lbl(p50)], textposition="middle right"))
+    elif t == "landing_bars":
+        cols = [LANDING_LIGHT if r.get("kind") == "landing" else COLORS.get(r.get("kind"), COLORS.get(
+            str(r["label"]).split(" ")[0], TOTAL)) for r in data]
+        err_hi = [sv(r["hi"] - r["value"]) if r.get("kind") == "landing" and r.get("hi") is not None
+                  and r.get("value") is not None else 0 for r in data]
+        err_lo = [sv(r["value"] - r["lo"]) if r.get("kind") == "landing" and r.get("lo") is not None
+                  and r.get("value") is not None else 0 for r in data]
+        fig.add_trace(go.Bar(x=[r["label"] for r in data], y=[sv(r.get("value")) for r in data],
+                             marker={"color": cols, "pattern": {"shape": ["/" if r.get("kind") == "landing" else ""
+                                                                         for r in data], "fgcolor": LANDING},
+                                     "line": {"color": [LANDING if r.get("kind") == "landing" else "#FFFFFF"
+                                                        for r in data], "width": 1.5}},
+                             error_y={"type": "data", "symmetric": False, "array": err_hi, "arrayminus": err_lo,
+                                      "color": LANDING, "thickness": 2, "width": 10},
+                             text=[lbl(r.get("value")) for r in data], textposition="outside", name="Value"))
+    elif t == "ytd_bars":
+        colors, patterns, lines = [], [], []
+        for r in data:
+            k = r.get("kind")
+            colors.append(LANDING_LIGHT if k == "landing" else ("#FFFFFF" if k == "forecast" else COLORS["Actual"]))
+            patterns.append("/" if k == "landing" else "")
+            lines.append(LANDING if k == "landing" else (COLORS["FC3"] if k == "forecast" else COLORS["Actual"]))
+        err_hi = [sv((r["hi"] - r["value"])) if r.get("kind") == "landing" and r.get("hi") is not None else 0 for r in data]
+        err_lo = [sv((r["value"] - r["lo"])) if r.get("kind") == "landing" and r.get("lo") is not None else 0 for r in data]
+        fig.add_trace(go.Bar(x=[r["Month"] for r in data], y=[sv(r.get("value")) for r in data], name="Actual / landing",
+                             marker={"color": colors, "pattern": {"shape": patterns, "fgcolor": LANDING},
+                                     "line": {"color": lines, "width": 1.5}},
+                             error_y={"type": "data", "symmetric": False, "array": err_hi, "arrayminus": err_lo,
+                                      "color": LANDING},
+                             text=[lbl(r.get("value")) for r in data], textposition="outside"))
+        if any(r.get("Budget") is not None for r in data):
+            fig.add_trace(go.Scatter(x=[r["Month"] for r in data], y=[sv(r.get("Budget")) for r in data],
+                                     mode="lines+markers", name="Budget",
+                                     line={"color": COLORS["Budget"], "dash": "dash", "width": 2}))
     fig.update_layout(
         title={"text": spec.get("title", ""), "font": {"size": 15}}, template="plotly_white", height=430,
         margin={"l": 40, "r": 20, "t": 60, "b": 40}, legend={"orientation": "h", "y": -0.18},

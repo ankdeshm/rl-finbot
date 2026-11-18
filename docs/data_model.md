@@ -1,7 +1,7 @@
 # Data model
 
 A star schema in SQL Server 2022 (`sql/schema.sql`). A DuckDB copy with the same tables and
-views (`scripts/export_duckdb.py`) supports a laptop or Hugging Face demo. The data is synthetic
+views (`scripts/export_duckdb.py`) supports a laptop demo. The data is synthetic
 and seeded (`config/settings.yaml`), so every run produces the same numbers. Company, people, codes
 and figures are fictional.
 
@@ -11,7 +11,7 @@ and figures are fictional.
 - **Leaf accounts only.** Fact rows exist only for leaf accounts. Every line, subtotal and ratio is computed from leaves at query time.
 - **Versions in one fact table.** Actual, Budget, FC1, FC2 and FC3 sit in the same table. PY (prior year) is not stored: it is Actual shifted back 12 months.
 - **Forecasts.** FCn holds actuals for the first months of the year and a reforecast for the rest. FC1 = 4 + 8, FC2 = 8 + 4, FC3 = 9 + 3. A forecast becomes available after the close of its last actual month, which is the 5th of the following month.
-- **Last closed month.** With the as-of date 2026-11-12, the last closed month is October 2026. Actuals stop there.
+- **Last closed month.** With the as-of date 2026-11-16, the last closed month is October 2026. Actuals stop there; November 2026 is the open (landing) month.
 - **Neutral labels.** Line and account names carry no codes or line numbers. Line numbers and account codes are internal keys only.
 
 ## Tables
@@ -24,10 +24,18 @@ and figures are fictional.
 | `dim_period` | 60 | Jan 2022 – Dec 2026: year, quarter, month, close date, closed flag |
 | `fact_pnl` | 1,168,756 | month × BU × leaf account × version → `amount_usd` (DECIMAL(18,2), signed) |
 | `fact_stats` | 31,588 | month × BU × version → FTE, headcount, direct FTE, billable / available / overtime hours |
-| `dim_employee` | 27,360 | Fictional employees, codes only (`E100123`): BU, role, grade G1–G5, staff type (direct / indirect), FTE %, hire and leave date, leave reason (voluntary / restructuring). No names or personal attributes |
-| `fact_employee_month` | 937,506 | employee × closed month → BU, FTE, available / billable / overtime hours (direct staff only), hire and leaver flags |
+| `dim_employee` | 27,294 | Fictional employees, codes only (`E100123`): BU, role, grade G1–G5, staff type (direct / indirect), FTE %, hire and leave date, leave reason (voluntary / restructuring). No names or personal attributes |
+| `fact_employee_month` | 937,504 | employee × closed month → BU, FTE, available / billable / overtime hours (direct staff only), hire and leaver flags |
 | `app_user` | 3 | Demo personas |
 | `user_org_access` | 3 | Org-level grants per persona (row-level security) |
+| `dim_calendar` | 20,086 | date × country → working day (Monday-Friday minus public holidays from the `holidays` package) |
+| `working_days` | 660 | month × country → number of working days |
+| `fact_landing` | 1,590 | landing snapshot × open month × BU × measure → P10 / P50 / P90, method weights, pattern class |
+| `fact_landing_leaf` | 3,286 | landing snapshot × open month × BU × leaf account → P50 amount (adds up to the BU's lines) |
+| `landing_method`, `landing_bu_profile`, `landing_residual`, `landing_run` | 530 / 106 / 2,544 / 1 | Per-method predictions and weights, BU profiles, past errors for the ranges, one row per landing run |
+| `landing_backtest_metric` | 836 | Measured backtest accuracy by scope, measure, method and metric (read by the Data Catalog and the answers) |
+| `landing_mtd_snapshot` | 0 | Optional month-to-date billing, used only when `landing.mtd_snapshot_enabled` is true |
+| `app.app_conversation`, `app.app_message`, `app.app_conversation_state` | per user | Conversation history (last 10 per user), in the separate `app` schema that the application login may write |
 
 `fact_pnl` rows per version: Actual 227,476 (58 closed months); Budget, FC1, FC2 and FC3 235,320 each (60 months).
 
@@ -94,9 +102,9 @@ and figures are fictional.
 Row-level security is enforced in two places:
 
 - **SQL Server.**
-  - `sql/rls.sql` creates `rls.fn_org_access` and a SECURITY POLICY on `fact_pnl`, `fact_stats`, `dim_employee` and `fact_employee_month`.
+  - `sql/rls.sql` creates `rls.fn_org_access` and a SECURITY POLICY on `fact_pnl`, `fact_stats`, `dim_employee`, `fact_employee_month` and every landing table with a BU (`fact_landing`, `fact_landing_leaf`, `landing_method`, `landing_bu_profile`, `landing_residual`, `landing_mtd_snapshot`).
   - Rows are filtered by `SESSION_CONTEXT('user_id')`, which the app sets read-only on every connection.
-  - The app connects as the least-privilege login `finbot_reader`, which has SELECT only. The admin login is used only by the loader.
+  - The app connects as the least-privilege login `iris_reader`, which has SELECT only on the data and may write only its conversation history in the `app` schema. The admin login is used only by the loader and the landing batch.
 - **Semantic layer.**
   - Applies the same rules before querying (`app/semantic/access.py`), so it can explain a refusal or a narrowed scope politely.
   - On DuckDB this is the only enforcement.

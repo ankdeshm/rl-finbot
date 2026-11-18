@@ -1,1 +1,1 @@
-"""RL FinBot."""
+"""Application package."""

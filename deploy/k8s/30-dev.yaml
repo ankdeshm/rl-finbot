@@ -28,11 +28,11 @@ data:
     #!/usr/bin/env bash
     # Wait until the workspace has been synced + `make setup` has created the venv, then serve.
     set -uo pipefail
-    cd /workspace/rl-finbot 2>/dev/null || true
-    while [ ! -x /workspace/rl-finbot/.venv/bin/streamlit ] || [ ! -f /workspace/rl-finbot/.app-ready ]; do
+    cd ${WS} 2>/dev/null || true
+    while [ ! -x ${WS}/.venv/bin/streamlit ] || [ ! -f ${WS}/.app-ready ]; do
       echo "waiting for workspace (.venv + .app-ready)"; sleep 15
     done
-    cd /workspace/rl-finbot
+    cd ${WS}
     exec .venv/bin/streamlit run app/ui/streamlit_app.py \
       --server.port 8501 --server.address 0.0.0.0 --server.headless true \
       --browser.gatherUsageStats false
@@ -110,6 +110,10 @@ spec:
             - name: MSSQL_APP_PASSWORD
               valueFrom:
                 secretKeyRef: {name: "${PREFIX}-secrets", key: MSSQL_APP_PASSWORD}
+            # Demo sign-in code (created by `make k8s-secrets`); optional so the .env value still works.
+            - name: APP_ACCESS_CODE
+              valueFrom:
+                secretKeyRef: {name: "${PREFIX}-secrets", key: APP_ACCESS_CODE, optional: true}
           resources:
             requests:
               cpu: 100m

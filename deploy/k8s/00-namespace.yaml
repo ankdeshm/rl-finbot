@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   name: ${NAMESPACE}
   labels:
-    app.kubernetes.io/part-of: rl-finbot
+    app.kubernetes.io/part-of: iris
 ---
 apiVersion: v1
 kind: ServiceAccount

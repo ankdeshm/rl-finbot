@@ -343,7 +343,7 @@ def cmp_phrase(diff: float | None, ref: float | None, lab: str, fmt: str = "eur"
     ref_txt = f" ({_val(ref, fmt)})" if _ok(ref) else ""
     if not _ok(diff):
         return f"no {lab} comparison available"
-    tiny = 5e-5 if fmt == "pct" else (0.05 if fmt in ("num", "rate") else 500)
+    tiny = 5e-4 if fmt == "pct" else (0.05 if fmt in ("num", "rate") else 500)
     if abs(diff) < tiny:
         return f"in line with {lab}{ref_txt}"
     up = diff > 0
@@ -834,6 +834,12 @@ def make_bullets(out: "ToolOutput") -> list[str]:
                   and " by month: " not in f]
         peak = [f for f in rest if f.startswith("Month with the most leavers")]
         return (head + brk + others[:3] + peak)[:6]
+    if kind in ("landing", "landing_ytd", "landing_explain", "ratio_pair"):
+        skip = ("WIP is 0", "The landing uses", "Backtest", "No margin base", "How the", "Components")
+        return [strip(f) for f in facts[1:] if not f.startswith(skip)][:6]
+    if kind == "landing_rank":
+        return [re.sub(r"^(\d+)\. ", r"Rank \1: ", strip(x)) for x in
+                (facts[1].split(": ", 1)[1].split("; ") if len(facts) > 1 and ": " in facts[1] else [])][:5]
     return []
 
 
@@ -923,7 +929,17 @@ def tool_get_ratio(args: GetRatioArgs, ctx: ToolContext) -> ToolOutput:
         return refusal
     period = resolve_period(ctx, args.period)
     comps = norm_versions(_as_list(args.comparison)) or ["PY", "Budget"]
-    res = ctx.sl.ratio(args.ratio_name, filt, period, [c for c in comps if c != "Actual"])
+    comps = [c for c in comps if c not in ("Actual", "Landing")]
+    reg = registry()
+    named = reg.get_ratio(args.ratio_name)
+    generic = reg.pair_for(args.ratio_name) is not None or (
+        named is not None and named.id in ("maop_margin_revenue", "maop_margin_production")
+        and bool(ctx.resolution and ctx.resolution.both_margins))
+    if generic:
+        from app.agent.tools_landing import ratio_pair_output  # noqa: WPS433
+
+        return ratio_pair_output(ctx, filt, period, comps, notes)
+    res = ctx.sl.ratio(args.ratio_name, filt, period, comps)
     out = _output("get_ratio", res, notes)
     out.facts = facts_ratio(res)
     return out
@@ -1131,6 +1147,19 @@ TOOLS: dict[str, tuple[type[BaseModel], Callable]] = {
     "get_workforce": (GetWorkforceArgs, tool_get_workforce),
     "run_readonly_sql": (RunReadonlySqlArgs, tool_run_readonly_sql),
 }
+
+
+def _register_extra_tools() -> None:
+    """Catalog and landing tools live in app.agent.tools_landing (imported last: it imports this module)."""
+    from app.agent import tools_landing as TL  # noqa: WPS433
+
+    TOOL_DESCRIPTIONS.update(TL.TOOL_DESCRIPTIONS)
+    sql = TOOLS.pop("run_readonly_sql")
+    TOOLS.update(TL.TOOLS_EXTRA)
+    TOOLS["run_readonly_sql"] = sql                    # keep the SQL fallback last in the planner's list
+
+
+_register_extra_tools()
 DATA_TOOLS = [t for t in TOOLS if t != "resolve_entities"]
 
 

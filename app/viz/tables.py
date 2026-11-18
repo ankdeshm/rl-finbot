@@ -13,6 +13,8 @@ from app.viz import format as F
 def build_table(out: dict) -> dict:
     """Turn a tool output into {columns, rows, col_fmt, row_meta, caption, extra_tables}."""
     kind, data, meta = out.get("kind"), out.get("data") or [], out.get("meta") or {}
+    if out.get("ok", True) and meta.get("table_spec"):
+        return meta["table_spec"]
     if not out.get("ok", True) or not data and kind != "drivers":
         return {"columns": [], "rows": [], "col_fmt": {}, "row_meta": [], "caption": "", "extra_tables": []}
     t = {"columns": [], "rows": data, "col_fmt": {}, "row_meta": [], "caption": "", "extra_tables": []}
@@ -158,7 +160,7 @@ def _cell_fmt(t: dict, m: dict | None, c: str) -> str | None:
     row_fmt = m.get("fmt")
     fmt = m.get("col_fmt", {}).get(c, t["col_fmt"].get(c))
     if row_fmt == "pct" and fmt in ("eur",):
-        fmt = "pp" if (" vs " in c or c.startswith("Var")) else "pct"
+        fmt = "pp" if (" vs " in c or c.startswith(("Var", "vs ", "Gap"))) else "pct"
     elif row_fmt == "pct" and fmt == "pct" and "Var %" in c:
         fmt = None
     elif row_fmt == "num" and fmt == "eur":

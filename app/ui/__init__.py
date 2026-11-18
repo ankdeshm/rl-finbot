@@ -1,1 +1,1 @@
-"""RL FinBot."""
+"""Streamlit user interface."""

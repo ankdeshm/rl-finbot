@@ -19,7 +19,8 @@ litellm.suppress_debug_info = True
 litellm.telemetry = False
 
 TOOL_NAMES = ("resolve_entities", "get_pnl", "get_trend", "get_ratio", "variance_drivers",
-              "rank_entities", "compare_versions", "get_kpi_cockpit", "get_workforce", "run_readonly_sql")
+              "rank_entities", "compare_versions", "get_kpi_cockpit", "get_workforce", "describe_catalog",
+              "get_landing", "get_ytd_with_landing", "explain_landing", "rank_landing", "run_readonly_sql")
 
 
 @dataclass

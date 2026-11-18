@@ -182,12 +182,22 @@ def test_highest_first_lists_do_not_list_zero_values():
     assert re.search(r"\d+ other roles 0\.0%", line), line
 
 
+def _restructuring_leavers() -> tuple[int, int]:
+    """Canada Environmental Lab Testing restructuring leavers YTD Oct 2026 and PY, straight from the records."""
+    from eval_dsl import months_of, workforce
+    org = {"l3_country": "Canada", "l4_product_line": "Environmental Lab Testing"}
+    return (int(workforce("restructuring_leavers", org, months_of("YTD-2026-10"))),
+            int(workforce("restructuring_leavers", org, months_of("YTD-2025-10"))))
+
+
 def test_workforce_counts_come_with_their_py_comparison():
-    # The writer must never compute "59 more than last year" itself: the fact states it.
+    # The writer must never compute "N more than last year" itself: the fact states it.
     ans, _ = ask("How many restructuring leavers did Canada Environmental Lab Testing have this year?", "group_cfo",
                  model="rules", as_of=AS_OF)
     assert ans.status == "ok"
-    assert "Restructuring leavers: 62; 59 more than PY (3)" in ans.answer_markdown, ans.answer_markdown[:400]
+    cur, py = _restructuring_leavers()
+    assert cur > py
+    assert f"Restructuring leavers: {cur}; {cur - py} more than PY ({py})" in ans.answer_markdown, ans.answer_markdown[:400]
 
 
 def test_question_keeps_the_narrower_workforce_figure(monkeypatch):
@@ -198,7 +208,8 @@ def test_question_keeps_the_narrower_workforce_figure(monkeypatch):
     monkeypatch.setattr(graph.llm, "chat", lambda *a, **k: fake)
     ans, _ = ask("How many restructuring leavers did Canada Environmental Lab Testing have this year?", "group_cfo",
                  model="ollama/stub", as_of=AS_OF)
-    assert ans.status == "ok" and ans.answer_markdown.startswith("**Restructuring leavers: 62"), ans.answer_markdown[:200]
+    cur, _py = _restructuring_leavers()
+    assert ans.status == "ok" and ans.answer_markdown.startswith(f"**Restructuring leavers: {cur}"), ans.answer_markdown[:200]
 
 
 def test_turnover_alone_is_revenue_not_attrition():

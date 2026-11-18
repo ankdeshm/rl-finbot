@@ -17,14 +17,22 @@ Spec keys (YAML):
     rank: {...value spec...}, level: l3_country, within: {...}, asc: false, n: 1
                                 -> value AND name of the n-th entity of the ranking
     org_from_rank: {...rank spec...}   org = the entity returned by that ranking (follow-ups)
+    v: LANDING  (p: M-2026-11)  landing P50 of the open month, summed over BUs from fact_landing
+    v: YTDL     (p: YTD-2026-11) closed-month actuals + the landing P50 of the open month
+    d: [spec_a, spec_b]         difference a - b (e.g. landing minus budget; works inside rank)
+    c: regions | countries | product_lines | businesses | business_units, persona: us_country_head
+                                -> number of entities the persona may see, and their names
+    names_from_yaml: ratios | metrics   -> display names defined in app/semantic/metrics.yaml
 """
 from __future__ import annotations
 
+from datetime import date
 from functools import lru_cache
 
+import yaml
 from sqlalchemy import text
 
-from app.config import backend
+from app.config import ROOT, backend, data_as_of_date, settings
 from app.db import get_engine
 
 # measure -> (SQL predicate on dim_account a, display sign)
@@ -54,6 +62,20 @@ WORKFORCE = {"headcount": "num", "fte": "num", "hires": "num", "leavers": "num",
              "attrition": "pct", "voluntary_attrition": "pct", "utilization": "pct", "overtime": "pct"}
 EMP_COLS = ("role", "grade", "staff_type")
 LEVELS = ("l1_group", "l2_region", "l3_country", "l4_product_line", "l5_business", "l6_bu")
+# measure -> fact_landing.measure (P50 stored with the ledger sign, like fact_pnl)
+LANDING_MEASURES = {"billing": "billing", "revenue": "revenue", "production": "production", "maop": "maop",
+                    "gross_profit": "gross_profit", "personnel": "personnel", "subcontracting": "subcontracting",
+                    "other_cost": "other_cost", "functional_cost": "functional_cost"}
+CATALOG_LEVEL = {"regions": "l2_region", "countries": "l3_country", "product_lines": "l4_product_line",
+                 "businesses": "l5_business", "business_units": "l6_bu"}
+AS_OF = data_as_of_date()
+
+
+def open_month(as_of: date = AS_OF) -> int:
+    """Month after the last closed month (a month closes on the close day of the following month)."""
+    close_day = int(settings()["close_day_of_next_month"])
+    back = 1 if as_of.day >= close_day else 2          # months back to the last closed month
+    return _add(_mk(as_of.year, as_of.month), 1 - back)
 
 
 # --------------------------------------------------------------------------------- periods
@@ -130,12 +152,50 @@ def _version_months(spec: dict) -> tuple[str, list[int]]:
     return v, months
 
 
+@lru_cache(maxsize=8)
+def landing_snapshot(month: int, as_of: date = AS_OF):
+    rows = _q("SELECT MAX(snapshot_date) FROM landing_run WHERE month_key = :m AND snapshot_date <= :a",
+              {"m": month, "a": as_of})
+    if not rows or rows[0][0] is None:
+        raise ValueError(f"no landing snapshot for {month} on or before {as_of}")
+    return rows[0][0]
+
+
+def landing_amount(measure: str, org: dict | None, month: int, group: str | None = None):
+    """Landing P50 of the open month summed over the BUs (display sign, like amount())."""
+    if month != open_month():
+        raise ValueError(f"landing exists for the open month {open_month()} only, not {month}")
+    sign = MEASURES[measure][1]
+    params = {"s": landing_snapshot(month), "m": month, "meas": LANDING_MEASURES[measure]}
+    gsel = f"o.{group}, " if group else ""
+    rows = _q(f"""SELECT {gsel}SUM(l.p50) FROM fact_landing l
+                  JOIN dim_org o ON o.bu_id = l.bu_id
+                  WHERE l.snapshot_date = :s AND l.month_key = :m AND l.measure = :meas{_org_sql(org, params)}
+                  {'GROUP BY o.' + group if group else ''}""", params)
+    if group:
+        return {r[0]: float(r[1] or 0) * sign for r in rows}
+    return float(rows[0][0] or 0) * sign
+
+
 def _q(sql: str, params: dict):
     with _engine().connect() as c:
         return c.execute(text(sql), params).fetchall()
 
 
+def _add_values(a, b):
+    if isinstance(a, dict):
+        return {k: a.get(k, 0.0) + b.get(k, 0.0) for k in set(a) | set(b)}
+    return a + b
+
+
 def amount(measure: str, org: dict | None, version: str, months: list[int], group: str | None = None):
+    if version == "LANDING":
+        return landing_amount(measure, org, months[-1], group)
+    if version == "YTDL":                       # closed months (Actual) + the open month (landing P50)
+        om = open_month()
+        closed = [k for k in months if k < om]
+        land = landing_amount(measure, org, om, group) if om in months else ({} if group else 0.0)
+        return _add_values(amount(measure, org, "Actual", closed, group) if closed else ({} if group else 0.0), land)
     pred, sign = MEASURES[measure]
     params = {"ver": version, "m0": min(months), "m1": max(months)}
     gsel = f"o.{group}, " if group else ""
@@ -213,6 +273,10 @@ def workforce(name: str, org: dict | None, months: list[int], group: str | None 
 
 
 def _fmt(spec: dict) -> str:
+    if "d" in spec:
+        return _fmt(spec["d"][0])
+    if "c" in spec or "names_from_yaml" in spec:
+        return "num"
     if "m" in spec:
         return "eur"
     if "s" in spec:
@@ -228,6 +292,13 @@ def _fmt(spec: dict) -> str:
 
 
 def _value(spec: dict, org, version, months, group=None):
+    if "d" in spec:
+        a, b = (dict(x) for x in spec["d"])
+        va = _value(a, org, *_version_months({**a, "p": a.get("p", spec.get("p"))}), group)
+        vb = _value(b, org, *_version_months({**b, "p": b.get("p", spec.get("p"))}), group)
+        if group:
+            return {k: va[k] - vb[k] for k in set(va) & set(vb)}
+        return va - vb
     if "m" in spec:
         return _component(spec["m"], org, version, months, group)
     if "s" in spec:
@@ -244,12 +315,48 @@ def _value(spec: dict, org, version, months, group=None):
     return num * k / den if den else None
 
 
+def _persona_bus(persona: str) -> set[int]:
+    rows = _q("SELECT org_level, org_value FROM user_org_access WHERE user_id = :u", {"u": persona})
+    org = _q("SELECT bu_id, l1_group, l2_region, l3_country, l4_product_line, l5_business, l6_bu FROM dim_org", {})
+    cols = ("bu_id", *LEVELS)
+    out = set()
+    for level, value in rows:
+        i = cols.index(level)
+        out |= {int(r[0]) for r in org if r[i] == value}
+    return out
+
+
+def catalog(kind: str, persona: str, within: dict | None = None) -> dict:
+    """Entities of one organisation level the persona may see (count and names)."""
+    lvl = CATALOG_LEVEL[kind]
+    bus = _persona_bus(persona)
+    params: dict = {}
+    rows = _q(f"SELECT o.bu_id, o.{lvl} FROM dim_org o WHERE 1 = 1{_org_sql(within, params)}", params)
+    names = sorted({r[1] for r in rows if int(r[0]) in bus})
+    return {"value": float(len(names)), "fmt": "num", "name": None, "names": names}
+
+
+def yaml_names(section: str) -> dict:
+    defs = yaml.safe_load((ROOT / "app" / "semantic" / "metrics.yaml").read_text())
+    items = defs.get(section) or {}
+    vals = items.values() if isinstance(items, dict) else items
+    names = sorted(str(v.get("name")) for v in vals if isinstance(v, dict) and v.get("name"))
+    return {"value": float(len(names)), "fmt": "num", "name": None, "names": names}
+
+
 def evaluate(spec: dict) -> dict:
-    """Return {'value': float, 'fmt': 'eur'|'pct'|'num'|'rate', 'name': entity or None}."""
+    """Return {'value': float, 'fmt': 'eur'|'pct'|'num'|'rate', 'name': entity or None[, 'names': [...]]}."""
+    if "c" in spec:
+        return catalog(spec["c"], spec.get("persona", "group_cfo"), spec.get("within"))
+    if "names_from_yaml" in spec:
+        return yaml_names(spec["names_from_yaml"])
     if "rank" in spec:
         inner = dict(spec["rank"])
         inner.setdefault("p", spec.get("p"))
-        version, months = _version_months({**inner, "v": inner.get("v", "Actual")})
+        if "d" in inner:                     # each side of a difference carries its own version / period
+            version, months = None, None
+        else:
+            version, months = _version_months({**inner, "v": inner.get("v", "Actual")})
         vals = _value(inner, spec.get("within"), version, months, group=spec["level"])
         items = sorted(((e, v) for e, v in vals.items() if v is not None), key=lambda x: x[1],
                        reverse=not spec.get("asc", False))

@@ -51,15 +51,26 @@ class RatioDef:
     synonyms: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class PairDef:
+    """Generic wording that means two ratios side by side (e.g. "profit %" = both operating margins)."""
+    id: str
+    name: str
+    members: tuple[str, ...]
+    synonyms: tuple[str, ...] = ()
+
+
 @dataclass
 class Registry:
     metrics: dict[str, MetricDef] = field(default_factory=dict)
     ratios: dict[str, RatioDef] = field(default_factory=dict)
+    pairs: dict[str, PairDef] = field(default_factory=dict)
     drivers: dict[str, list[str]] = field(default_factory=dict)
     line_formulas: dict[int, tuple[int, ...]] = field(default_factory=dict)
     computed: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
     cockpit: list[str] = field(default_factory=list)
     _lookup: dict[str, tuple[str, str]] = field(default_factory=dict)
+    _pair_lookup: dict[str, str] = field(default_factory=dict)
 
     # -------------------------------------------------------------- lookup
     def _key(self, s: str) -> str:
@@ -75,12 +86,31 @@ class Registry:
         for r in self.ratios.values():
             for s in (r.id, r.name, *r.synonyms):
                 self._lookup.setdefault(self._key(s), ("ratio", r.id))
+        for p in self.pairs.values():
+            for s in (p.id, p.name, *p.synonyms):
+                self._pair_lookup.setdefault(self._key(s), p.id)
+
+    def pair_for(self, name: str | None) -> PairDef | None:
+        """The ratio pair named by `name` (id, name or generic synonym such as "profit %"), else None."""
+        if not name:
+            return None
+        raw = str(name).strip()
+        if raw in self.pairs:
+            return self.pairs[raw]
+        pid = self._pair_lookup.get(self._key(raw))
+        return self.pairs[pid] if pid else None
 
     def resolve(self, name: str | None) -> tuple[str | None, object | None]:
-        """Return ('metric', MetricDef) or ('ratio', RatioDef) for an id/name/synonym/code."""
+        """Return ('metric', MetricDef) or ('ratio', RatioDef) for an id/name/synonym/code.
+
+        A ratio pair (generic margin wording) resolves to its first member; callers that can show both
+        check `pair_for()`."""
         if not name:
             return None, None
         raw = str(name).strip()
+        pair = self.pair_for(raw)
+        if pair is not None:
+            return "ratio", self.ratios[pair.members[0]]
         if raw.startswith("ratio:") or ("/" in raw and not re.match(r"^\d", raw)):
             r = self.get_ratio(raw)
             if r:
@@ -102,7 +132,10 @@ class Registry:
         from app.semantic.entity_resolver import _find_matches, _metric_index, normalize  # noqa: WPS433
         hits = _find_matches(normalize(raw), _metric_index(), "metric")
         if hits:
-            t = sorted(hits[0].payload["targets"], key=lambda x: 0 if x["kind"] == "ratio" else 1)[0]
+            targets = [t for t in hits[0].payload["targets"] if t["kind"] in ("metric", "ratio", "pair")]
+            t = sorted(targets, key=lambda x: 0 if x["kind"] in ("ratio", "pair") else 1)[0]
+            if t["kind"] == "pair":
+                return "ratio", self.ratios[self.pairs[t["id"]].members[0]]
             return t["kind"], (self.metrics[t["id"]] if t["kind"] == "metric" else self.ratios[t["id"]])
         return None, None
 
@@ -226,6 +259,9 @@ def registry() -> Registry:
                                    fmt=r.get("format", "pct"), favorable=r.get("favorable", "neutral"),
                                    annualize=bool(r.get("annualize", False)),
                                    synonyms=tuple(r.get("synonyms", [])))
+    for pid, p in (spec.get("ratio_pairs") or {}).items():
+        reg.pairs[pid] = PairDef(id=pid, name=p["name"], members=tuple(p["members"]),
+                                 synonyms=tuple(p.get("synonyms", [])))
     reg.drivers = {k: list(v) for k, v in (spec.get("drivers") or {}).items()}
     reg.cockpit = list(spec.get("cockpit") or [])
     reg.build_lookup()

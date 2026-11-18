@@ -1,22 +1,22 @@
 # What is the utilization rate in Mexico vs budget?
 
 - **Persona:** Group CFO
-- **Model:** `rules` · **status:** ok · **latency:** 0.18 s
+- **Model:** `rules` · **status:** ok · **latency:** 0.16 s
 - **Tool:** `get_ratio` (chosen by `router_fallback`) · **numeric guardrail:** n/a (no LLM)
 
 ## Answer
 
-**Utilization rate (billable / available hours) for Mexico, YTD Oct 2026 (Actual): 82.0%.**
+**Utilization rate (billable / available hours) for Mexico, YTD Oct 2026 (Actual): 74.7%.**
 
-- Components (Actual): Billable hours 1,830,727.4; Available hours 2,233,043.5
-- Actual is 0.7 pp below Budget (YTD Oct 2026) (82.7%), unfavourable
+- Components (Actual): Billable hours 1,449,116.8; Available hours 1,940,360.6
+- Actual is 0.9 pp below Budget (YTD Oct 2026) (75.6%), unfavourable
 
 ## Table
 
 | Version | Period | Billable hours | Available hours | Utilization rate (billable / available hours) | Actual vs version |
 |:---|---:|---:|---:|---:|---:|
-| Actual | YTD Oct 2026 | 1,830,727 | 2,233,044 | 82.0% |  |
-| Budget | YTD Oct 2026 | 1,857,611 | 2,247,542 | 82.7% | (0.7 pp) |
+| Actual | YTD Oct 2026 | 1,449,117 | 1,940,361 | 74.7% |  |
+| Budget | YTD Oct 2026 | 1,472,989 | 1,948,966 | 75.6% | (0.9 pp) |
 
 ## Chart
 
@@ -27,8 +27,8 @@
 - Scope: Mexico
 - Period: YTD Oct 2026 (Jan 2026 - Oct 2026)
 - Versions: Actual (Actual, YTD Oct 2026), Budget (Budget, YTD Oct 2026)
-- Currency: USD at B26 (constant budget rate)
-- As-of date: 2026-11-12 · row-level security: SQL Server SECURITY POLICY (SESSION_CONTEXT)
+- Currency: USD at constant budget rate
+- As-of date: 2026-11-16 · row-level security: SQL Server SECURITY POLICY (SESSION_CONTEXT)
 
 ## Follow-up questions
 
@@ -63,6 +63,9 @@
           "<empty>"
         ],
         "checked": 0,
+        "problems": [
+          "the answer was empty"
+        ],
         "draft": ""
       }
     ],
@@ -72,9 +75,9 @@
   },
   "errors": [],
   "timings": {
-    "preprocess": 0.009,
+    "preprocess": 0.008,
     "plan": 0.0,
-    "act": 0.161,
+    "act": 0.147,
     "write#1": 0.0
   }
 }
