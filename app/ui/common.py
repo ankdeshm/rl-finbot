@@ -79,6 +79,10 @@ div[data-testid="stChatMessage"] {background: #FFFFFF;}
 .iris-card {border:1px solid #E2E8F0; border-radius:10px; padding:10px 12px; background:#F8FAFC;}
 .iris-card .v {font-size:1.35rem; font-weight:700; color:#0B1F3A;}
 .iris-card .l {font-size:0.78rem; color:#475569;}
+.ug-fig {margin: 14px 0 22px; padding: 0;}
+.ug-fig img {display: block; height: auto; border-radius: 10px; border: 1px solid #CBD5E1;
+             box-shadow: 0 4px 16px rgba(11, 31, 58, 0.08);}
+.ug-fig figcaption {font-size: 0.82rem; color: #475569; margin-top: 6px; font-style: italic;}
 </style>
 """
 MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+\-.!|>~<])")

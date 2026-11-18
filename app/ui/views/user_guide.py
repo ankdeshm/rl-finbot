@@ -1,11 +1,15 @@
 """User Guide page: renders docs/user_guide.md (the single source, so the page and the file stay identical).
 
 Gallery lines between the `gallery:start` / `gallery:end` markers become buttons that send the question to
-Chat; image lines are shown from docs/img/.
+Chat; image lines are rendered losslessly at native Retina HiDPI density from docs/img/.
 """
 from __future__ import annotations
 
+import base64
+import html
 import re
+import struct
+from pathlib import Path
 
 import streamlit as st
 
@@ -14,6 +18,28 @@ from app.config import ROOT
 GUIDE = ROOT / "docs" / "user_guide.md"
 IMG_RX = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)\s*$")
 GALLERY_RX = re.compile(r"^- \*\*(?P<intent>[^:*]+):\*\* (?P<q>.+)$")
+CAPTURE_SCALE = 2.5
+
+
+def _png_logical_width(path: Path) -> int:
+    data = path.read_bytes()[:24]
+    if len(data) >= 24 and data[:8] == b"\x89PNG\r\n\x1a\n":
+        w, _ = struct.unpack(">II", data[16:24])
+        return max(320, int(round(w / CAPTURE_SCALE)))
+    return 1100
+
+
+def _render_lossless_png(path: Path, caption: str) -> None:
+    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+    lw = _png_logical_width(path)
+    cap_html = f"<figcaption>{html.escape(caption)}</figcaption>" if caption else ""
+    st.markdown(
+        f"<figure class='ug-fig'>"
+        f"<img src='data:image/png;base64,{b64}' alt='{html.escape(caption)}' "
+        f"style='width: min(100%, {lw}px);'/>"
+        f"{cap_html}</figure>",
+        unsafe_allow_html=True,
+    )
 
 
 def gallery_items(text: str) -> list[tuple[str, str]]:
@@ -66,7 +92,7 @@ def render() -> None:
             _flush(buf)
             path = (GUIDE.parent / m["src"]).resolve()
             if path.exists() and path.is_relative_to(GUIDE.parent):
-                st.image(str(path), caption=m["alt"], width=900)
+                _render_lossless_png(path, m["alt"])
             continue
         buf.append(line)
     _flush(buf)
